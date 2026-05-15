@@ -1,0 +1,285 @@
+import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
+import { CompositeScreenProps } from '@react-navigation/native';
+import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import React, { useCallback, useMemo } from 'react';
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { AdBanner } from '../components/AdBanner';
+import { IronStratosWordmark } from '../components/IronStratosWordmark';
+import { MetricCard } from '../components/MetricCard';
+import { NCRCard } from '../components/NCRCard';
+import { QuickActionButton } from '../components/QuickActionButton';
+import { Colors, Shadow, Spacing } from '../constants/colors';
+import { useNCRs } from '../hooks/useNCRs';
+import { useProfile } from '../hooks/useProfile';
+import { RootStackParamList, TabParamList } from '../navigation/types';
+import { greetingFor, isOverdue } from '../utils/ncrHelpers';
+
+type Props = CompositeScreenProps<
+  BottomTabScreenProps<TabParamList, 'Dashboard'>,
+  NativeStackScreenProps<RootStackParamList>
+>;
+
+export function DashboardScreen({ navigation }: Props) {
+  const { profile } = useProfile();
+  const { ncrs, reload } = useNCRs();
+
+  useFocusEffect(
+    useCallback(() => {
+      void reload();
+    }, [reload]),
+  );
+
+  const metrics = useMemo(() => {
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    const open = ncrs.filter((n) => n.status !== 'Closed').length;
+    const overdueActions = ncrs.reduce((acc, n) => {
+      const overdueOnNCR = n.actions.filter(
+        (a) => a.status !== 'Completed' && a.dueDate && new Date(a.dueDate).getTime() < Date.now(),
+      ).length;
+      const ncrOverdueBonus = isOverdue(n) ? 1 : 0;
+      return acc + overdueOnNCR + ncrOverdueBonus;
+    }, 0);
+    const closedThisMonth = ncrs.filter(
+      (n) => n.status === 'Closed' && n.updatedAt >= monthStart,
+    ).length;
+    const auditsThisMonth = 0;
+    return { open, overdueActions, closedThisMonth, auditsThisMonth };
+  }, [ncrs]);
+
+  const recent = ncrs.slice(0, 5);
+  const greeting = greetingFor();
+  const namePart = profile?.name ? `, ${profile.name}` : '';
+
+  const isFreeTier = (profile?.subscriptionTier ?? 'free') === 'free';
+
+  return (
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+      <View style={styles.headerRow}>
+        <View>
+          <Text style={styles.brand}>NConform</Text>
+          <Text style={styles.greeting}>{`${greeting}${namePart}`}</Text>
+        </View>
+        <Pressable
+          onPress={() => navigation.navigate('Settings')}
+          style={({ pressed }) => [styles.settingsBtn, pressed && { opacity: 0.7 }]}
+          hitSlop={8}
+        >
+          <Ionicons name="settings-outline" size={22} color={Colors.navy} />
+        </Pressable>
+      </View>
+
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.metricsGrid}>
+          <View style={styles.metricsRow}>
+            <MetricCard
+              label="Open NCRs"
+              value={metrics.open}
+              accent={metrics.open > 0 ? 'amber' : 'neutral'}
+              icon="clipboard-outline"
+            />
+            <MetricCard
+              label="Overdue Actions"
+              value={metrics.overdueActions}
+              accent={metrics.overdueActions > 0 ? 'red' : 'neutral'}
+              icon="alert-circle-outline"
+            />
+          </View>
+          <View style={styles.metricsRow}>
+            <MetricCard
+              label="Audits This Month"
+              value={metrics.auditsThisMonth}
+              icon="shield-checkmark-outline"
+            />
+            <MetricCard
+              label="Closed This Month"
+              value={metrics.closedThisMonth}
+              accent={metrics.closedThisMonth > 0 ? 'green' : 'neutral'}
+              icon="checkmark-circle-outline"
+            />
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Recent Activity</Text>
+            {ncrs.length > 0 ? (
+              <Pressable onPress={() => navigation.navigate('Main', { screen: 'NCRs' })}>
+                <Text style={styles.sectionAction}>View all</Text>
+              </Pressable>
+            ) : null}
+          </View>
+          {recent.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <Ionicons name="document-text-outline" size={28} color={Colors.secondaryText} />
+              <Text style={styles.emptyTitle}>No nonconformances yet</Text>
+              <Text style={styles.emptyBody}>
+                When you log an NCR, it will appear here for quick reference.
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.recentList}>
+              {recent.map((n) => (
+                <NCRCard
+                  key={n.id}
+                  ncr={n}
+                  compact
+                  onPress={() => navigation.navigate('NCRDetail', { ncrId: n.id })}
+                />
+              ))}
+            </View>
+          )}
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Quick Actions</Text>
+          <View style={styles.quickActions}>
+            <QuickActionButton
+              label="Log NCR"
+              variant="primary"
+              icon="add-circle-outline"
+              onPress={() => navigation.navigate('LogNCR')}
+              fullWidth
+            />
+            <QuickActionButton
+              label="Start Audit"
+              variant="outline"
+              icon="shield-checkmark-outline"
+              onPress={() => navigation.navigate('Main', { screen: 'Audits' })}
+              fullWidth
+            />
+            <QuickActionButton
+              label="View Reports"
+              variant="ghost"
+              icon="document-text-outline"
+              onPress={() => navigation.navigate('Main', { screen: 'Reports' })}
+              fullWidth
+            />
+          </View>
+        </View>
+
+        <AdBanner
+          visible={isFreeTier}
+          onUpgrade={() => navigation.navigate('Settings')}
+        />
+
+        <View style={styles.footerWordmark}>
+          <IronStratosWordmark size="sm" />
+        </View>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+    backgroundColor: Colors.background,
+  },
+  headerRow: {
+    paddingHorizontal: Spacing.xl,
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.lg,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  brand: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: Colors.navy,
+    letterSpacing: -0.3,
+  },
+  greeting: {
+    fontSize: 14,
+    color: Colors.secondaryText,
+    marginTop: 2,
+  },
+  settingsBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: Colors.border,
+    ...Shadow.card,
+  },
+  scrollContent: {
+    paddingBottom: Spacing.xxl,
+  },
+  metricsGrid: {
+    paddingHorizontal: Spacing.xl,
+    gap: Spacing.md,
+  },
+  metricsRow: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+  },
+  section: {
+    paddingHorizontal: Spacing.xl,
+    marginTop: Spacing.xl,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.md,
+  },
+  sectionTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: Colors.navy,
+    letterSpacing: -0.2,
+    marginBottom: Spacing.md,
+  },
+  sectionAction: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.steelBlue,
+  },
+  emptyCard: {
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 8,
+    padding: Spacing.xl,
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  emptyTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.navy,
+  },
+  emptyBody: {
+    fontSize: 13,
+    color: Colors.secondaryText,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  recentList: {
+    gap: Spacing.md,
+  },
+  quickActions: {
+    gap: Spacing.sm,
+  },
+  footerWordmark: {
+    alignItems: 'center',
+    paddingTop: Spacing.xl,
+    paddingBottom: Spacing.lg,
+  },
+});
