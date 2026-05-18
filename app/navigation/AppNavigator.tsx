@@ -14,6 +14,7 @@ import { OnboardingScreen } from '../screens/OnboardingScreen';
 import { OnePagerScreen } from '../screens/OnePagerScreen';
 import { ReportsScreen } from '../screens/ReportsScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
+import { StandardsLibraryScreen } from '../screens/StandardsLibraryScreen';
 import { TrainingFormScreen } from '../screens/TrainingFormScreen';
 import { UserDirectoryScreen } from '../screens/UserDirectoryScreen';
 import { BottomTabNavigator } from './BottomTabNavigator';
@@ -55,6 +56,7 @@ export function AppNavigator() {
         <Stack.Screen name="Actions" component={ActionsScreen} />
         <Stack.Screen name="OnePager" component={OnePagerScreen} />
         <Stack.Screen name="UserDirectory" component={UserDirectoryScreen} />
+        <Stack.Screen name="StandardsLibrary" component={StandardsLibraryScreen} />
         <Stack.Screen
           name="AuditBuilder"
           component={AuditBuilderScreen}

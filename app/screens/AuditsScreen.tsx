@@ -6,7 +6,6 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AdBanner } from '../components/AdBanner';
-import { FeatureLock } from '../components/FeatureLock';
 import { MetricCard } from '../components/MetricCard';
 import { QuickActionButton } from '../components/QuickActionButton';
 import { ScreenHeader } from '../components/ScreenHeader';
@@ -16,7 +15,7 @@ import { useProfile } from '../hooks/useProfile';
 import { RootStackParamList, TabParamList } from '../navigation/types';
 import { Audit } from '../types';
 import { formatDate } from '../utils/ncrHelpers';
-import { adsEnabled, isBundle } from '../utils/subscription';
+import { adsEnabled } from '../utils/subscription';
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<TabParamList, 'Audits'>,
@@ -66,29 +65,6 @@ export function AuditsScreen({ navigation }: Props) {
       return true;
     });
   }, [audits, statusFilter, dateFilter, monthStartISO]);
-
-  if (!isBundle(profile)) {
-    return (
-      <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-        <ScreenHeader title="Audits" subtitle="Layered Process Audits" />
-        <FeatureLock
-          tier="bundle"
-          title="Layered Process Audits"
-          description="Schedule and run multi-layer process audits, score them automatically, and turn failed items into NCRs."
-          bullets={[
-            'Layer 1–3 audit builder with reusable templates',
-            'Pass / Fail / N-A scoring with photo evidence',
-            'Auto-generate NCRs from failed items',
-            'Audit history and pass-rate trends',
-          ]}
-          onUpgrade={() => navigation.navigate('Settings')}
-        />
-        {adsEnabled(profile) ? (
-          <AdBanner visible onUpgrade={() => navigation.navigate('Settings')} />
-        ) : null}
-      </SafeAreaView>
-    );
-  }
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
@@ -196,6 +172,9 @@ export function AuditsScreen({ navigation }: Props) {
           </View>
         )}
       </ScrollView>
+      {adsEnabled(profile) ? (
+        <AdBanner visible onUpgrade={() => navigation.navigate('Settings')} />
+      ) : null}
     </SafeAreaView>
   );
 }

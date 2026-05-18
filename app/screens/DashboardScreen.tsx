@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AdBanner } from '../components/AdBanner';
 import { IronStratosWordmark } from '../components/IronStratosWordmark';
+import { NetworkStatusIcon } from '../components/NetworkStatusIcon';
 import { MetricCard } from '../components/MetricCard';
 import { NCRCard } from '../components/NCRCard';
 import { QuickActionButton } from '../components/QuickActionButton';
@@ -73,13 +74,16 @@ export function DashboardScreen({ navigation }: Props) {
           <Text style={styles.brand}>NConform</Text>
           <Text style={styles.greeting}>{`${greeting}${namePart}`}</Text>
         </View>
-        <Pressable
-          onPress={() => navigation.navigate('Settings')}
-          style={({ pressed }) => [styles.settingsBtn, pressed && { opacity: 0.7 }]}
-          hitSlop={8}
-        >
-          <Ionicons name="settings-outline" size={22} color={Colors.navy} />
-        </Pressable>
+        <View style={styles.headerActions}>
+          <NetworkStatusIcon />
+          <Pressable
+            onPress={() => navigation.navigate('Settings')}
+            style={({ pressed }) => [styles.settingsBtn, pressed && { opacity: 0.7 }]}
+            hitSlop={8}
+          >
+            <Ionicons name="settings-outline" size={22} color={Colors.navy} />
+          </Pressable>
+        </View>
       </View>
 
       <ScrollView
@@ -194,7 +198,7 @@ const styles = StyleSheet.create({
   },
   headerRow: {
     paddingHorizontal: Spacing.xl,
-    paddingTop: Spacing.md,
+    paddingTop: Spacing.xl,
     paddingBottom: Spacing.lg,
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -211,6 +215,11 @@ const styles = StyleSheet.create({
     color: Colors.secondaryText,
     marginTop: 2,
   },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
   settingsBtn: {
     width: 40,
     height: 40,
@@ -223,7 +232,8 @@ const styles = StyleSheet.create({
     ...Shadow.card,
   },
   scrollContent: {
-    paddingBottom: Spacing.xxl,
+    paddingTop: Spacing.xs,
+    paddingBottom: Spacing.xxl + 72,
   },
   metricsGrid: {
     paddingHorizontal: Spacing.xl,

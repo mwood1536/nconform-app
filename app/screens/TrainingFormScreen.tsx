@@ -129,7 +129,7 @@ export function TrainingFormScreen({ navigation, route }: Props) {
       />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScrollView
           contentContainerStyle={styles.content}

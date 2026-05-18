@@ -14,6 +14,7 @@ export type RootStackParamList = {
   AuditExecution: { auditId: string };
   TrainingForm: { recordId?: string } | undefined;
   UserDirectory: undefined;
+  StandardsLibrary: undefined;
 };
 
 export type TabParamList = {

@@ -78,6 +78,7 @@ export interface NCR {
   severity: Severity;
   standardRef: StandardReference;
   description: string;
+  standardClauses: string[];
   photos: NCRPhoto[];
   containmentAction: string;
   assignedTo: string;

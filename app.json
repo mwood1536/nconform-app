@@ -21,13 +21,20 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.ironstratos.nconform"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "expo-notifications",
+        {
+          "color": "#1B2A4A"
+        }
+      ]
     ],
     "extra": {
       "eas": {

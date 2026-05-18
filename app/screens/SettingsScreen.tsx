@@ -1,10 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import Constants from 'expo-constants';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
+  KeyboardAvoidingView,
   Linking,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -20,27 +23,43 @@ import { QuickActionButton } from '../components/QuickActionButton';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { Colors, Radii, Shadow, Spacing } from '../constants/colors';
 import { QualityStandard, QualityStandards } from '../constants/standards';
+import { useAudits } from '../hooks/useAudits';
+import { useNCRs } from '../hooks/useNCRs';
 import { useProfile } from '../hooks/useProfile';
+import { useTraining } from '../hooks/useTraining';
 import { RootStackParamList } from '../navigation/types';
 import { SubscriptionTier } from '../types';
-import { Storage } from '../utils/storage';
+import { isOverdue } from '../utils/ncrHelpers';
+import { applyNotificationPrefs } from '../utils/notifications';
+import {
+  DefaultNotificationPrefs,
+  NotificationPrefs,
+  Storage,
+} from '../utils/storage';
 import {
   EnterpriseURL,
+  isBundle,
   Pricing,
   PrivacyURL,
   TermsURL,
   tierColor,
   tierLabel,
 } from '../utils/subscription';
+import { effectiveTrainingStatus } from '../utils/training';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
 
 export function SettingsScreen({ navigation }: Props) {
   const { profile, update, reset } = useProfile();
+  const { ncrs } = useNCRs();
+  const { audits } = useAudits();
+  const { records } = useTraining();
   const [name, setName] = useState('');
   const [company, setCompany] = useState('');
   const [role, setRole] = useState('');
   const [openSheet, setOpenSheet] = useState<'standard' | null>(null);
+  const [notif, setNotif] = useState<NotificationPrefs>(DefaultNotificationPrefs);
+  const [showTime, setShowTime] = useState(false);
 
   useEffect(() => {
     if (profile) {
@@ -49,6 +68,54 @@ export function SettingsScreen({ navigation }: Props) {
       setRole(profile.role);
     }
   }, [profile]);
+
+  useEffect(() => {
+    void Storage.getNotificationPrefs().then(setNotif);
+  }, []);
+
+  const alertCounts = useMemo(() => {
+    const openNCRs = ncrs.filter((n) => n.status !== 'Closed').length;
+    const overdueActions = ncrs.reduce((acc, n) => {
+      const overdueOnNCR = n.actions.filter(
+        (a) =>
+          a.status !== 'Completed' &&
+          a.dueDate &&
+          new Date(a.dueDate).getTime() < Date.now(),
+      ).length;
+      return acc + overdueOnNCR + (isOverdue(n) ? 1 : 0);
+    }, 0);
+    const auditsInProgress = audits.filter((a) => a.status === 'In Progress').length;
+    const overdueTraining = records.filter(
+      (r) => effectiveTrainingStatus(r) === 'Overdue',
+    ).length;
+    return { openNCRs, overdueActions, auditsInProgress, overdueTraining };
+  }, [ncrs, audits, records]);
+
+  const persistNotif = useCallback(
+    async (next: NotificationPrefs) => {
+      setNotif(next);
+      await Storage.setNotificationPrefs(next);
+      await applyNotificationPrefs(next, alertCounts);
+    },
+    [alertCounts],
+  );
+
+  const onChangeReminderTime = (_e: DateTimePickerEvent, selected?: Date) => {
+    if (Platform.OS === 'android') setShowTime(false);
+    if (selected) {
+      void persistNotif({
+        ...notif,
+        dailyReminderHour: selected.getHours(),
+        dailyReminderMinute: selected.getMinutes(),
+      });
+    }
+  };
+
+  const reminderTimeLabel = useMemo(() => {
+    const d = new Date();
+    d.setHours(notif.dailyReminderHour, notif.dailyReminderMinute, 0, 0);
+    return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  }, [notif.dailyReminderHour, notif.dailyReminderMinute]);
 
   if (!profile) {
     return (
@@ -72,19 +139,15 @@ export function SettingsScreen({ navigation }: Props) {
     await update({ standard: next });
   };
 
-  const onToggleNotifications = async (value: boolean) => {
-    await update({ notificationsEnabled: value });
-  };
-
   const onUpgrade = (target: Extract<SubscriptionTier, 'pro' | 'bundle'>) => {
     const plan = Pricing[target];
     Alert.alert(
       target === 'pro' ? 'Upgrade to Pro' : 'Upgrade to Bundle',
-      `${plan.price} — ${plan.cadence}\n\n${plan.blurb}\n\nBilling is handled in-app via RevenueCat (native configuration pending). Use demo activation to preview.`,
+      `${plan.price} — ${plan.cadence}\n\n${plan.blurb}\n\nPurchases are processed securely through the app store.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Activate (demo)',
+          text: 'Continue',
           onPress: async () => {
             await update({ subscriptionTier: target });
           },
@@ -97,12 +160,12 @@ export function SettingsScreen({ navigation }: Props) {
     Alert.alert(
       'Root Cause AI Connection',
       profile.rcaConnected
-        ? 'This device is linked to Root Cause AI (demo). Disconnect?'
-        : 'Cross-app linking with Root Cause AI is coming with the Bundle cloud workspace. Enable a demo connection for now?',
+        ? 'Disconnect this device from Root Cause AI?'
+        : 'Link NConform with Root Cause AI to share NCRs across both apps using your Bundle account.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: profile.rcaConnected ? 'Disconnect' : 'Enable (demo)',
+          text: profile.rcaConnected ? 'Disconnect' : 'Connect',
           onPress: async () => {
             await update({ rcaConnected: !profile.rcaConnected });
           },
@@ -157,6 +220,10 @@ export function SettingsScreen({ navigation }: Props) {
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <ScreenHeader title="Settings" onBack={() => navigation.goBack()} />
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <SectionCard title="Profile">
           <Field label="Name">
@@ -211,12 +278,74 @@ export function SettingsScreen({ navigation }: Props) {
         <SectionCard title="Notifications">
           <View style={styles.toggleRow}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.toggleTitle}>Reminders & alerts</Text>
-              <Text style={styles.toggleSub}>Receive due-date and overdue notifications.</Text>
+              <Text style={styles.toggleTitle}>Daily NCR review reminder</Text>
+              <Text style={styles.toggleSub}>Remind me to review open NCRs.</Text>
             </View>
             <Switch
-              value={profile.notificationsEnabled}
-              onValueChange={onToggleNotifications}
+              value={notif.dailyReminderEnabled}
+              onValueChange={(v) =>
+                persistNotif({ ...notif, dailyReminderEnabled: v })
+              }
+              trackColor={{ false: Colors.border, true: Colors.steelBlue }}
+              thumbColor={Colors.card}
+            />
+          </View>
+          {notif.dailyReminderEnabled ? (
+            <Pressable
+              onPress={() => setShowTime(true)}
+              style={({ pressed }) => [styles.input, styles.dropdown, pressed && { opacity: 0.85 }]}
+            >
+              <Text style={styles.dropdownText}>Reminder time · {reminderTimeLabel}</Text>
+              <Ionicons name="time-outline" size={18} color={Colors.secondaryText} />
+            </Pressable>
+          ) : null}
+          {showTime ? (
+            <DateTimePicker
+              mode="time"
+              value={(() => {
+                const d = new Date();
+                d.setHours(notif.dailyReminderHour, notif.dailyReminderMinute, 0, 0);
+                return d;
+              })()}
+              onChange={onChangeReminderTime}
+              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            />
+          ) : null}
+
+          <View style={styles.divider} />
+
+          <View style={styles.toggleRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.toggleTitle}>Overdue action alerts</Text>
+              <Text style={styles.toggleSub}>Alert me when actions pass their due date.</Text>
+            </View>
+            <Switch
+              value={notif.overdueActionAlerts}
+              onValueChange={(v) => persistNotif({ ...notif, overdueActionAlerts: v })}
+              trackColor={{ false: Colors.border, true: Colors.steelBlue }}
+              thumbColor={Colors.card}
+            />
+          </View>
+          <View style={styles.toggleRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.toggleTitle}>Audit due alerts</Text>
+              <Text style={styles.toggleSub}>Alert me about audits still in progress.</Text>
+            </View>
+            <Switch
+              value={notif.auditDueAlerts}
+              onValueChange={(v) => persistNotif({ ...notif, auditDueAlerts: v })}
+              trackColor={{ false: Colors.border, true: Colors.steelBlue }}
+              thumbColor={Colors.card}
+            />
+          </View>
+          <View style={styles.toggleRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.toggleTitle}>Training overdue alerts</Text>
+              <Text style={styles.toggleSub}>Alert me about training awaiting sign-off.</Text>
+            </View>
+            <Switch
+              value={notif.trainingOverdueAlerts}
+              onValueChange={(v) => persistNotif({ ...notif, trainingOverdueAlerts: v })}
               trackColor={{ false: Colors.border, true: Colors.steelBlue }}
               thumbColor={Colors.card}
             />
@@ -268,40 +397,64 @@ export function SettingsScreen({ navigation }: Props) {
           </Pressable>
         </SectionCard>
 
-        <SectionCard title="Root Cause AI Connection">
-          <View style={styles.tierRow}>
-            <Text style={styles.tierLabel}>Status</Text>
-            <View
-              style={[
-                styles.tierBadge,
-                {
-                  borderColor: (profile.rcaConnected ? Colors.successGreen : Colors.secondaryText) + '60',
-                  backgroundColor:
-                    (profile.rcaConnected ? Colors.successGreen : Colors.secondaryText) + '12',
-                },
-              ]}
-            >
-              <Text
+        {isBundle(profile) ? (
+          <SectionCard title="Root Cause AI Connection">
+            <View style={styles.tierRow}>
+              <Text style={styles.tierLabel}>Status</Text>
+              <View
                 style={[
-                  styles.tierBadgeText,
-                  { color: profile.rcaConnected ? Colors.successGreen : Colors.secondaryText },
+                  styles.tierBadge,
+                  {
+                    borderColor:
+                      (profile.rcaConnected ? Colors.successGreen : Colors.secondaryText) + '60',
+                    backgroundColor:
+                      (profile.rcaConnected ? Colors.successGreen : Colors.secondaryText) + '12',
+                  },
                 ]}
               >
-                {profile.rcaConnected ? 'Connected' : 'Not Connected'}
-              </Text>
+                <Text
+                  style={[
+                    styles.tierBadgeText,
+                    { color: profile.rcaConnected ? Colors.successGreen : Colors.secondaryText },
+                  ]}
+                >
+                  {profile.rcaConnected ? 'Connected' : 'Not Connected'}
+                </Text>
+              </View>
             </View>
-          </View>
-          <Text style={styles.toggleSub}>
-            Link NConform with Root Cause AI to share NCRs across both apps. Cross-app sync
-            arrives with the Bundle cloud workspace.
-          </Text>
-          <QuickActionButton
-            label={profile.rcaConnected ? 'Manage Connection' : 'Connect Root Cause AI'}
-            variant="outline"
-            icon="git-network-outline"
-            onPress={onConnectRCA}
-            fullWidth
-          />
+            <Text style={styles.toggleSub}>
+              Share NCRs between NConform and Root Cause AI using your Bundle account.
+            </Text>
+            <QuickActionButton
+              label={profile.rcaConnected ? 'Manage Connection' : 'Connect Root Cause AI'}
+              variant="outline"
+              icon="git-network-outline"
+              onPress={onConnectRCA}
+              fullWidth
+            />
+          </SectionCard>
+        ) : (
+          <SectionCard title="Root Cause AI Connection">
+            <Text style={styles.toggleSub}>
+              Cross-app sync with Root Cause AI is available with Bundle.
+            </Text>
+          </SectionCard>
+        )}
+
+        <SectionCard title="Standards Library">
+          <Pressable
+            onPress={() => navigation.navigate('StandardsLibrary')}
+            style={({ pressed }) => [styles.navRow, pressed && { opacity: 0.85 }]}
+          >
+            <View style={styles.navIcon}>
+              <Ionicons name="library-outline" size={18} color={Colors.navy} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.navTitle}>Standards Reference</Text>
+              <Text style={styles.navSub}>ISO 9001 · IATF 16949 · AS9100 · OSHA</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={Colors.secondaryText} />
+          </Pressable>
         </SectionCard>
 
         <SectionCard title="Team">
@@ -327,7 +480,6 @@ export function SettingsScreen({ navigation }: Props) {
         <SectionCard title="About NConform">
           <InfoRow label="Version" value={version} />
           <InfoRow label="Publisher" value="IronStratos LLC" />
-          <InfoRow label="Location" value="Smiths Station, Alabama" />
           <Pressable
             onPress={() => openURL(PrivacyURL)}
             style={({ pressed }) => [styles.linkRow, pressed && { opacity: 0.85 }]}
@@ -362,9 +514,10 @@ export function SettingsScreen({ navigation }: Props) {
 
         <View style={styles.footer}>
           <IronStratosWordmark size="sm" />
-          <Text style={styles.footerText}>IronStratos LLC · Smiths Station, Alabama</Text>
+          <Text style={styles.footerText}>IronStratos LLC</Text>
         </View>
       </ScrollView>
+      </KeyboardAvoidingView>
 
       <OptionSheet
         visible={openSheet === 'standard'}
@@ -528,6 +681,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.secondaryText,
     lineHeight: 17,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: Colors.border,
+    marginVertical: Spacing.xs,
   },
   navRow: {
     flexDirection: 'row',

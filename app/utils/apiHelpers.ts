@@ -1,4 +1,5 @@
 import { AIcorrectiveActionResponse, NCR } from '../types';
+import { ensureOnlineForAI } from './network';
 
 const ANTHROPIC_MODEL = 'claude-sonnet-4-6';
 
@@ -66,6 +67,7 @@ export async function generateCorrectiveAction(
   ncr: NCR,
   profileStandard: string,
 ): Promise<AIcorrectiveActionResponse> {
+  await ensureOnlineForAI();
   const proxyUrl = getProxyUrl();
   const directKey = getDirectKey();
   const userPrompt = buildUserPrompt(ncr, profileStandard);
@@ -142,6 +144,7 @@ async function callAnthropicText(
   userContent: string,
   maxTokens: number,
 ): Promise<string> {
+  await ensureOnlineForAI();
   const proxyUrl = getProxyUrl();
   const directKey = getDirectKey();
   if (!proxyUrl && !directKey) {
@@ -235,6 +238,7 @@ export async function generateOnePagerSummary(
   ncr: NCR,
   profileStandard: string,
 ): Promise<string> {
+  await ensureOnlineForAI();
   const proxyUrl = getProxyUrl();
   const directKey = getDirectKey();
   if (!proxyUrl && !directKey) {
@@ -280,4 +284,96 @@ export async function generateOnePagerSummary(
   const text = payload.content?.find((b) => b.type === 'text')?.text ?? '';
   if (!text) throw new Error('Empty AI response.');
   return text.trim();
+}
+
+function sliceJSON(text: string): string {
+  const trimmed = text.trim();
+  const fence = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  const body = fence ? fence[1] : trimmed;
+  const objStart = body.indexOf('{');
+  const arrStart = body.indexOf('[');
+  const start =
+    objStart === -1 ? arrStart : arrStart === -1 ? objStart : Math.min(objStart, arrStart);
+  const objEnd = body.lastIndexOf('}');
+  const arrEnd = body.lastIndexOf(']');
+  const end = Math.max(objEnd, arrEnd);
+  if (start === -1 || end === -1) throw new Error('No JSON found in AI response.');
+  return body.slice(start, end + 1);
+}
+
+export interface StandardSuggestion {
+  recommendation: string;
+  standards: string[];
+}
+
+// FIX 3 — recommend quality/safety standard clauses from an NCR's title +
+// description. Free-tier feature, available to every user.
+export async function suggestStandards(
+  title: string,
+  description: string,
+  profileStandard: string,
+): Promise<StandardSuggestion> {
+  const userContent =
+    `Quality framework in use: ${profileStandard || 'Not specified'}\n` +
+    `NCR Title: ${title}\n` +
+    `NCR Description: ${description}\n\n` +
+    'Identify which quality/safety standard clause(s) this nonconformance most likely relates to ' +
+    '(consider ISO 9001, IATF 16949, AS9100, OSHA). Respond ONLY with JSON of the form ' +
+    '{"recommendation": "<one professional sentence explaining the most relevant reference>", ' +
+    '"standards": ["ISO 9001 §8.7 — Control of Nonconforming Outputs", "..."]}. ' +
+    'Return 1–4 entries in "standards", most relevant first.';
+
+  const raw = await callAnthropicText(
+    'You are a quality management expert in ISO 9001, IATF 16949, AS9100, and OSHA. You map nonconformances to the correct standard clauses. Return only valid JSON.',
+    userContent,
+    500,
+  );
+  try {
+    const parsed = JSON.parse(sliceJSON(raw)) as Partial<StandardSuggestion>;
+    const standards = Array.isArray(parsed.standards)
+      ? parsed.standards.filter((s): s is string => typeof s === 'string' && s.length > 0)
+      : [];
+    return {
+      recommendation:
+        typeof parsed.recommendation === 'string' && parsed.recommendation.length > 0
+          ? parsed.recommendation
+          : 'Review the standards below and select any that apply.',
+      standards,
+    };
+  } catch {
+    throw new Error('Could not parse the AI suggestion. Please try again.');
+  }
+}
+
+// FIX 14 — generate a reusable audit checklist from a short scope
+// description. Available to all tiers as a productivity feature.
+export async function generateAuditTemplateQuestions(
+  scope: string,
+  layer: string,
+  standard: string,
+): Promise<string[]> {
+  const userContent =
+    `Audit scope: ${scope}\n` +
+    `Audit layer: ${layer}\n` +
+    `Standard: ${standard}\n\n` +
+    'Generate 8–12 concise, specific audit checklist questions for a Layered Process Audit. ' +
+    'Each question must be answerable with Pass / Fail / N-A. Respond ONLY with a JSON array of ' +
+    'strings, e.g. ["Is the machine guard in place and undamaged?", "..."].';
+
+  const raw = await callAnthropicText(
+    'You are a manufacturing quality and safety auditor who writes precise Layered Process Audit checklists. Return only a valid JSON array of question strings.',
+    userContent,
+    900,
+  );
+  try {
+    const parsed = JSON.parse(sliceJSON(raw)) as unknown;
+    if (!Array.isArray(parsed)) throw new Error('not an array');
+    return parsed
+      .filter((q): q is string => typeof q === 'string')
+      .map((q) => q.trim())
+      .filter((q) => q.length > 0)
+      .slice(0, 12);
+  } catch {
+    throw new Error('Could not parse the generated template. Please try again.');
+  }
 }

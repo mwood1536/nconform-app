@@ -8,6 +8,7 @@ interface CreateNCRInput {
   detectionPoint: NCR['detectionPoint'];
   severity: NCR['severity'];
   standardRef: NCR['standardRef'];
+  standardClauses?: string[];
   description: string;
   photos: NCR['photos'];
   containmentAction: string;
@@ -62,6 +63,7 @@ export function useNCRs(): UseNCRsResult {
         detectionPoint: input.detectionPoint,
         severity: input.severity,
         standardRef: input.standardRef,
+        standardClauses: input.standardClauses ?? [],
         description: input.description,
         photos: input.photos,
         containmentAction: input.containmentAction,

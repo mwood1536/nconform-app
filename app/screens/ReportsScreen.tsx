@@ -8,14 +8,12 @@ import { QuickActionButton } from '../components/QuickActionButton';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { Colors, Radii, Shadow, Spacing } from '../constants/colors';
 import { useNCRs } from '../hooks/useNCRs';
-import { useProfile } from '../hooks/useProfile';
 import { RootStackParamList } from '../navigation/types';
 import {
   buildCorrectiveActionHTML,
   buildNCRSummaryHTML,
   generateAndSharePDF,
 } from '../utils/reports';
-import { isProOrBundle, Pricing } from '../utils/subscription';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Reports'>;
 
@@ -27,8 +25,6 @@ const SEVERITY_FILTERS: SeverityFilter[] = ['All', 'Low', 'Medium', 'High', 'Cri
 
 export function ReportsScreen({ navigation }: Props) {
   const { ncrs, reload } = useNCRs();
-  const { profile } = useProfile();
-  const isPro = isProOrBundle(profile);
 
   useFocusEffect(
     useCallback(() => {
@@ -40,21 +36,7 @@ export function ReportsScreen({ navigation }: Props) {
   const [severityFilter, setSeverityFilter] = useState<SeverityFilter>('All');
   const [generating, setGenerating] = useState<string | null>(null);
 
-  const requireProGate = (): boolean => {
-    if (isPro) return true;
-    Alert.alert(
-      'NConform Pro Required',
-      `Unlock PDF exports and the One Pager Builder with NConform Pro for ${Pricing.pro.price}.`,
-      [
-        { text: 'Maybe later', style: 'cancel' },
-        { text: 'Upgrade', onPress: () => navigation.navigate('Settings') },
-      ],
-    );
-    return false;
-  };
-
   const onGenerateNCRSummary = async () => {
-    if (!requireProGate()) return;
     setGenerating('summary');
     try {
       const html = buildNCRSummaryHTML(ncrs, { status: statusFilter, severity: severityFilter });
@@ -67,7 +49,6 @@ export function ReportsScreen({ navigation }: Props) {
   };
 
   const onGenerateCAStatus = async () => {
-    if (!requireProGate()) return;
     setGenerating('ca');
     try {
       const html = buildCorrectiveActionHTML(ncrs);
@@ -91,7 +72,6 @@ export function ReportsScreen({ navigation }: Props) {
           icon="document-text-outline"
           title="NCR Summary Report"
           description="Filterable list of nonconformances with severity, status, and ownership."
-          locked={!isPro}
         >
           <Text style={styles.smallLabel}>Status</Text>
           <View style={styles.pillsRow}>
@@ -131,7 +111,6 @@ export function ReportsScreen({ navigation }: Props) {
           icon="checkmark-done-outline"
           title="Corrective Action Status"
           description="All open and closed corrective actions with target dates and overdue flags."
-          locked={!isPro}
         >
           <QuickActionButton
             label={generating === 'ca' ? 'Generating…' : 'Generate PDF'}
@@ -147,34 +126,15 @@ export function ReportsScreen({ navigation }: Props) {
           icon="newspaper-outline"
           title="One Pager Builder"
           description="Pick the blocks, let AI write an executive summary, and save a branded card."
-          locked={!isPro}
         >
           <QuickActionButton
             label="Open One Pager Builder"
             variant="amber"
             icon="sparkles-outline"
-            onPress={() => {
-              if (!requireProGate()) return;
-              navigation.navigate('OnePager');
-            }}
+            onPress={() => navigation.navigate('OnePager')}
             fullWidth
           />
         </ReportCard>
-
-        {!isPro ? (
-          <Pressable
-            onPress={() => navigation.navigate('Settings')}
-            style={({ pressed }) => [styles.proCta, pressed && { opacity: 0.95 }]}
-          >
-            <View style={{ flex: 1 }}>
-              <Text style={styles.proCtaTitle}>Unlock NConform Pro</Text>
-              <Text style={styles.proCtaBody}>
-                PDF exports, One Pager Builder, and ad-free for {Pricing.pro.price}.
-              </Text>
-            </View>
-            <Ionicons name="lock-closed" size={20} color={Colors.amber} />
-          </Pressable>
-        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
@@ -184,11 +144,10 @@ interface ReportCardProps {
   icon: keyof typeof Ionicons.glyphMap;
   title: string;
   description: string;
-  locked: boolean;
   children: React.ReactNode;
 }
 
-function ReportCard({ icon, title, description, locked, children }: ReportCardProps) {
+function ReportCard({ icon, title, description, children }: ReportCardProps) {
   return (
     <View style={styles.reportCard}>
       <View style={styles.reportHeader}>
@@ -196,15 +155,7 @@ function ReportCard({ icon, title, description, locked, children }: ReportCardPr
           <Ionicons name={icon} size={20} color={Colors.navy} />
         </View>
         <View style={{ flex: 1 }}>
-          <View style={styles.reportTitleRow}>
-            <Text style={styles.reportTitle}>{title}</Text>
-            {locked ? (
-              <View style={styles.lockBadge}>
-                <Ionicons name="lock-closed" size={12} color={Colors.amber} />
-                <Text style={styles.lockBadgeLabel}>PRO</Text>
-              </View>
-            ) : null}
-          </View>
+          <Text style={styles.reportTitle}>{title}</Text>
           <Text style={styles.reportDesc}>{description}</Text>
         </View>
       </View>

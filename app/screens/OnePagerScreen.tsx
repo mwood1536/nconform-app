@@ -14,9 +14,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { captureRef } from 'react-native-view-shot';
-import { FeatureLock } from '../components/FeatureLock';
 import { OptionSheet } from '../components/OptionSheet';
 import { QuickActionButton } from '../components/QuickActionButton';
+import { OfflineBanner } from '../components/OfflineBanner';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { Colors, Radii, Shadow, Spacing } from '../constants/colors';
 import { useNCRs } from '../hooks/useNCRs';
@@ -25,7 +25,6 @@ import { RootStackParamList } from '../navigation/types';
 import { NCR } from '../types';
 import { generateExecutiveOnePager } from '../utils/apiHelpers';
 import { formatDate } from '../utils/ncrHelpers';
-import { isProOrBundle } from '../utils/subscription';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'OnePager'>;
 
@@ -127,26 +126,6 @@ export function OnePagerScreen({ navigation, route }: Props) {
     }
   };
 
-  if (!isProOrBundle(profile)) {
-    return (
-      <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-        <ScreenHeader title="One Pager" onBack={() => navigation.goBack()} />
-        <FeatureLock
-          tier="pro"
-          title="One Pager Builder"
-          description="Generate a polished, branded executive summary card from any NCR and save it to your photo library."
-          bullets={[
-            'Choose exactly which blocks to include',
-            'Quick Summary, Full Investigation, Audit Ready presets',
-            'AI-written executive narrative',
-            'Save as a branded image',
-          ]}
-          onUpgrade={() => navigation.navigate('Settings')}
-        />
-      </SafeAreaView>
-    );
-  }
-
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <ScreenHeader
@@ -154,6 +133,7 @@ export function OnePagerScreen({ navigation, route }: Props) {
         subtitle="Executive summary for leadership"
         onBack={() => navigation.goBack()}
       />
+      <OfflineBanner />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Text style={styles.sectionLabel}>Source NCR</Text>
         <Pressable

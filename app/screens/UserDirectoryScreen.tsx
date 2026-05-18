@@ -3,7 +3,9 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useState } from 'react';
 import {
   Alert,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -128,6 +130,10 @@ export function UserDirectoryScreen({ navigation }: Props) {
       </ScrollView>
 
       <Modal visible={adding} animationType="slide" transparent onRequestClose={() => setAdding(false)}>
+        <KeyboardAvoidingView
+          style={styles.modalFill}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
         <Pressable style={styles.backdrop} onPress={() => setAdding(false)}>
           <Pressable style={styles.sheet} onPress={() => undefined}>
             <View style={styles.handle} />
@@ -161,6 +167,7 @@ export function UserDirectoryScreen({ navigation }: Props) {
             </View>
           </Pressable>
         </Pressable>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
@@ -229,6 +236,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.secondaryText,
     marginTop: 2,
+  },
+  modalFill: {
+    flex: 1,
   },
   backdrop: {
     flex: 1,

@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AdBanner } from '../components/AdBanner';
 import { NCRCard } from '../components/NCRCard';
+import { NetworkStatusIcon } from '../components/NetworkStatusIcon';
 import { Colors, Radii, Shadow, Spacing } from '../constants/colors';
 import { useNCRs } from '../hooks/useNCRs';
 import { useProfile } from '../hooks/useProfile';
@@ -68,7 +69,10 @@ export function NCRListScreen({ navigation }: Props) {
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <View style={styles.headerRow}>
         <Text style={styles.title}>Nonconformances</Text>
-        <Text style={styles.count}>{filtered.length}</Text>
+        <View style={styles.headerRight}>
+          <NetworkStatusIcon />
+          <Text style={styles.count}>{filtered.length}</Text>
+        </View>
       </View>
 
       <View style={styles.searchWrap}>
@@ -168,6 +172,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: Colors.navy,
     letterSpacing: -0.3,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
   },
   count: {
     fontSize: 13,

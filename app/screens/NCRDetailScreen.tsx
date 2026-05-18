@@ -6,6 +6,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import {
   Alert,
   Image,
+  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
@@ -146,6 +147,19 @@ export function NCRDetailScreen({ navigation, route }: Props) {
           <View style={styles.divider} />
           <Text style={styles.sectionLabel}>Description</Text>
           <Text style={styles.body}>{ncr.description}</Text>
+
+          {ncr.standardClauses.length > 0 ? (
+            <>
+              <View style={styles.divider} />
+              <Text style={styles.sectionLabel}>Referenced Standards</Text>
+              {ncr.standardClauses.map((c) => (
+                <View key={c} style={styles.clauseRow}>
+                  <Ionicons name="library-outline" size={14} color={Colors.steelBlue} />
+                  <Text style={styles.clauseText}>{c}</Text>
+                </View>
+              ))}
+            </>
+          ) : null}
 
           {ncr.containmentAction ? (
             <>
@@ -306,6 +320,10 @@ export function NCRDetailScreen({ navigation, route }: Props) {
         transparent
         onRequestClose={() => setAddingAction(false)}
       >
+        <KeyboardAvoidingView
+          style={styles.modalFill}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
         <Pressable style={styles.modalBackdrop} onPress={() => setAddingAction(false)}>
           <Pressable style={styles.modalSheet} onPress={() => undefined}>
             <View style={styles.modalHandle} />
@@ -355,6 +373,7 @@ export function NCRDetailScreen({ navigation, route }: Props) {
             </View>
           </Pressable>
         </Pressable>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
@@ -695,6 +714,21 @@ const styles = StyleSheet.create({
     color: Colors.steelBlue,
     fontWeight: '600',
     lineHeight: 17,
+  },
+  clauseRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+    paddingVertical: 3,
+  },
+  clauseText: {
+    flex: 1,
+    fontSize: 13,
+    color: Colors.bodyText,
+    lineHeight: 18,
+  },
+  modalFill: {
+    flex: 1,
   },
   modalBackdrop: {
     flex: 1,

@@ -16,6 +16,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FormField } from '../components/FormField';
 import { OptionSheet } from '../components/OptionSheet';
+import { OfflineBanner } from '../components/OfflineBanner';
 import { QuickActionButton } from '../components/QuickActionButton';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { Colors, Radii, Shadow, Spacing } from '../constants/colors';
@@ -29,6 +30,7 @@ import { useAudits } from '../hooks/useAudits';
 import { useProfile } from '../hooks/useProfile';
 import { RootStackParamList } from '../navigation/types';
 import { Audit, AuditQuestion, AuditTemplate } from '../types';
+import { generateAuditTemplateQuestions } from '../utils/apiHelpers';
 import { generateId, nowISO } from '../utils/ncrHelpers';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AuditBuilder'>;
@@ -53,6 +55,41 @@ export function AuditBuilderScreen({ navigation, route }: Props) {
   const [draftRequiresPhoto, setDraftRequiresPhoto] = useState(false);
   const [openSheet, setOpenSheet] = useState<'layer' | 'standard' | null>(null);
   const [busy, setBusy] = useState(false);
+  const [aiScope, setAiScope] = useState('');
+  const [generatingAI, setGeneratingAI] = useState(false);
+
+  const onGenerateWithAI = async () => {
+    const scope = aiScope.trim();
+    if (!scope) {
+      Alert.alert('Describe the audit', 'Tell the AI what you want to audit first.');
+      return;
+    }
+    setGeneratingAI(true);
+    try {
+      const generated = await generateAuditTemplateQuestions(scope, layer, standard);
+      if (generated.length === 0) {
+        Alert.alert('No questions generated', 'Try a more specific description.');
+        return;
+      }
+      setQuestions((q) => [
+        ...q,
+        ...generated.map((prompt) => ({
+          id: generateId('q'),
+          prompt,
+          requiresPhoto: false,
+        })),
+      ]);
+      if (!name.trim()) setName(scope.slice(0, 60));
+      setAiScope('');
+    } catch (err) {
+      Alert.alert(
+        'Could not generate template',
+        err instanceof Error ? err.message : 'Please try again.',
+      );
+    } finally {
+      setGeneratingAI(false);
+    }
+  };
 
   useEffect(() => {
     if (!seedTemplateId) return;
@@ -151,9 +188,10 @@ export function AuditBuilderScreen({ navigation, route }: Props) {
         subtitle="Layered Process Audit"
         onBack={() => navigation.goBack()}
       />
+      <OfflineBanner />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScrollView
           contentContainerStyle={styles.content}
@@ -190,6 +228,33 @@ export function AuditBuilderScreen({ navigation, route }: Props) {
               <Ionicons name="chevron-down" size={18} color={Colors.secondaryText} />
             </Pressable>
           </FormField>
+
+          <View style={styles.aiCard}>
+            <View style={styles.aiHeader}>
+              <Ionicons name="sparkles" size={15} color={Colors.amber} />
+              <Text style={styles.aiTitle}>Generate template with AI</Text>
+            </View>
+            <Text style={styles.aiSub}>
+              Describe what you want to audit — AI drafts 8–12 Pass / Fail / N-A questions you
+              can edit before saving.
+            </Text>
+            <TextInput
+              style={[styles.input, styles.multiline]}
+              value={aiScope}
+              onChangeText={setAiScope}
+              placeholder="e.g. Pre-shift safety check on the CNC machine area"
+              placeholderTextColor={Colors.secondaryText}
+              multiline
+            />
+            <QuickActionButton
+              label={generatingAI ? 'Generating…' : 'Generate Questions'}
+              variant="amber"
+              icon="sparkles-outline"
+              onPress={onGenerateWithAI}
+              disabled={generatingAI}
+              fullWidth
+            />
+          </View>
 
           <Text style={styles.sectionLabel}>Questions ({questions.length})</Text>
           {questions.length === 0 ? (
@@ -396,6 +461,31 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
     marginTop: Spacing.md,
     ...Shadow.card,
+  },
+  aiCard: {
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: Colors.amber + '50',
+    borderRadius: Radii.card,
+    padding: Spacing.lg,
+    gap: Spacing.sm,
+    marginTop: Spacing.md,
+    ...Shadow.card,
+  },
+  aiHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  aiTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.navy,
+  },
+  aiSub: {
+    fontSize: 12,
+    color: Colors.secondaryText,
+    lineHeight: 17,
   },
   photoToggleRow: {
     flexDirection: 'row',

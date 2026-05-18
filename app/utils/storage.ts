@@ -21,7 +21,26 @@ export const StorageKeys = {
   auditTemplates: 'auditTemplates',
   trainingRecords: 'trainingRecords',
   teamDirectory: 'teamDirectory',
+  notificationPrefs: 'notificationPrefs',
 } as const;
+
+export interface NotificationPrefs {
+  dailyReminderEnabled: boolean;
+  dailyReminderHour: number;
+  dailyReminderMinute: number;
+  overdueActionAlerts: boolean;
+  auditDueAlerts: boolean;
+  trainingOverdueAlerts: boolean;
+}
+
+export const DefaultNotificationPrefs: NotificationPrefs = {
+  dailyReminderEnabled: false,
+  dailyReminderHour: 8,
+  dailyReminderMinute: 0,
+  overdueActionAlerts: true,
+  auditDueAlerts: true,
+  trainingOverdueAlerts: true,
+};
 
 async function readJSON<T>(key: string, fallback: T): Promise<T> {
   try {
@@ -57,7 +76,11 @@ function normalizeProfile(raw: UserProfile | null): UserProfile | null {
 
 // NCRs created before the RCA toggle existed default to not shared.
 function normalizeNCR(raw: NCR): NCR {
-  return { ...raw, sharedWithRCA: raw.sharedWithRCA ?? false };
+  return {
+    ...raw,
+    sharedWithRCA: raw.sharedWithRCA ?? false,
+    standardClauses: raw.standardClauses ?? [],
+  };
 }
 
 export const Storage = {
@@ -121,6 +144,17 @@ export const Storage = {
     await writeJSON(StorageKeys.teamDirectory, members);
   },
 
+  async getNotificationPrefs(): Promise<NotificationPrefs> {
+    const stored = await readJSON<Partial<NotificationPrefs>>(
+      StorageKeys.notificationPrefs,
+      {},
+    );
+    return { ...DefaultNotificationPrefs, ...stored };
+  },
+  async setNotificationPrefs(prefs: NotificationPrefs): Promise<void> {
+    await writeJSON(StorageKeys.notificationPrefs, prefs);
+  },
+
   async nextNCRNumber(): Promise<string> {
     const current = await readJSON<number>(StorageKeys.ncrCounter, 0);
     const next = current + 1;
@@ -139,6 +173,7 @@ export const Storage = {
       StorageKeys.auditTemplates,
       StorageKeys.trainingRecords,
       StorageKeys.teamDirectory,
+      StorageKeys.notificationPrefs,
     ]);
   },
 };

@@ -7,6 +7,7 @@ import {
   Alert,
   Animated,
   Easing,
+  KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
@@ -16,11 +17,13 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { OfflineBanner } from '../components/OfflineBanner';
 import { QuickActionButton } from '../components/QuickActionButton';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { SeverityBadge } from '../components/SeverityBadge';
 import { Colors, Radii, Shadow, Spacing } from '../constants/colors';
 import { useNCRs } from '../hooks/useNCRs';
+import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { useProfile } from '../hooks/useProfile';
 import { RootStackParamList } from '../navigation/types';
 import { CorrectiveAction } from '../types';
@@ -56,6 +59,7 @@ export function AICorrectiveActionScreen({ navigation, route }: Props) {
   const { ncrId } = route.params;
   const { ncrs, attachCorrectiveAction } = useNCRs();
   const { profile } = useProfile();
+  const net = useNetworkStatus();
   const ncr = useMemo(() => ncrs.find((n) => n.id === ncrId) ?? null, [ncrs, ncrId]);
 
   const [loading, setLoading] = useState(true);
@@ -140,6 +144,15 @@ export function AICorrectiveActionScreen({ navigation, route }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ncr]);
 
+  // Offline queue: if generation failed while offline, retry automatically
+  // the moment connectivity returns.
+  useEffect(() => {
+    if (net.justReconnected && ncr && !draft && !loading && error) {
+      void runGenerate();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [net.justReconnected]);
+
   if (!ncr) {
     return (
       <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
@@ -208,7 +221,12 @@ export function AICorrectiveActionScreen({ navigation, route }: Props) {
         subtitle="Generating your corrective action report"
         onBack={() => navigation.goBack()}
       />
+      <OfflineBanner />
 
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
       <ScrollView
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
@@ -340,6 +358,7 @@ export function AICorrectiveActionScreen({ navigation, route }: Props) {
           </View>
         ) : null}
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

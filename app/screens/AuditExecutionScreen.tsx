@@ -6,6 +6,8 @@ import React, { useCallback, useMemo, useState } from 'react';
 import {
   Alert,
   Image,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -249,7 +251,15 @@ export function AuditExecutionScreen({ navigation, route }: Props) {
           {answered} of {total} answered
         </Text>
       </View>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+      <ScrollView
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
         {audit.questions.map((q, idx) => {
           const r = working.find((x) => x.questionId === q.id);
           return (
@@ -325,6 +335,7 @@ export function AuditExecutionScreen({ navigation, route }: Props) {
           fullWidth
         />
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

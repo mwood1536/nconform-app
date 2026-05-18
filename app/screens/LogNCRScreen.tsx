@@ -19,6 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { FormField } from '../components/FormField';
 import { OptionSheet } from '../components/OptionSheet';
 import { QuickActionButton } from '../components/QuickActionButton';
+import { OfflineBanner } from '../components/OfflineBanner';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { Colors, Radii, Shadow, Spacing } from '../constants/colors';
 import {
@@ -30,14 +31,24 @@ import {
   StandardReferences,
 } from '../constants/standards';
 import { useNCRs } from '../hooks/useNCRs';
+import { useProfile } from '../hooks/useProfile';
 import { RootStackParamList } from '../navigation/types';
 import { NCRPhoto } from '../types';
+import { StandardSuggestion, suggestStandards } from '../utils/apiHelpers';
 import { formatDate, nowISO, severityColor } from '../utils/ncrHelpers';
+
+function mapToStandardRef(text: string): StandardReference | null {
+  if (text.includes('IATF')) return 'IATF Requirement';
+  if (text.includes('AS9100')) return 'AS9100 Clause';
+  if (text.includes('ISO 9001')) return 'ISO 9001 Clause';
+  return null;
+}
 
 type Props = NativeStackScreenProps<RootStackParamList, 'LogNCR'>;
 
 export function LogNCRScreen({ navigation }: Props) {
   const { createNCR } = useNCRs();
+  const { profile } = useProfile();
   const [title, setTitle] = useState('');
   const [detectionPoint, setDetectionPoint] = useState<DetectionPoint | null>(null);
   const [severity, setSeverity] = useState<Severity>('Medium');
@@ -52,7 +63,42 @@ export function LogNCRScreen({ navigation }: Props) {
 
   const [openSheet, setOpenSheet] = useState<'detection' | 'standard' | null>(null);
 
+  const [suggesting, setSuggesting] = useState(false);
+  const [suggestion, setSuggestion] = useState<StandardSuggestion | null>(null);
+  const [selectedClauses, setSelectedClauses] = useState<string[]>([]);
+
+  const canSuggest = title.trim().length > 0 && description.trim().length > 0;
   const canSave = title.trim().length > 0 && detectionPoint !== null && description.trim().length > 0;
+
+  const onSuggestStandards = async () => {
+    if (!canSuggest || suggesting) return;
+    setSuggesting(true);
+    try {
+      const result = await suggestStandards(
+        title.trim(),
+        description.trim(),
+        profile?.standard ?? '',
+      );
+      setSuggestion(result);
+      if (result.standards.length > 0) {
+        const mapped = mapToStandardRef(result.standards[0]);
+        if (mapped) setStandardRef(mapped);
+      }
+    } catch (err) {
+      Alert.alert(
+        'Suggestion unavailable',
+        err instanceof Error ? err.message : 'Please try again.',
+      );
+    } finally {
+      setSuggesting(false);
+    }
+  };
+
+  const toggleClause = (clause: string) => {
+    setSelectedClauses((prev) =>
+      prev.includes(clause) ? prev.filter((c) => c !== clause) : [...prev, clause],
+    );
+  };
 
   const onPickFromCamera = async () => {
     const perm = await ImagePicker.requestCameraPermissionsAsync();
@@ -104,6 +150,7 @@ export function LogNCRScreen({ navigation }: Props) {
         detectionPoint,
         severity,
         standardRef: standardRef ?? 'N/A',
+        standardClauses: selectedClauses,
         description: description.trim(),
         photos,
         containmentAction: containmentAction.trim(),
@@ -125,10 +172,11 @@ export function LogNCRScreen({ navigation }: Props) {
         subtitle="Document what was found"
         onBack={() => navigation.goBack()}
       />
+      <OfflineBanner />
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScrollView
           contentContainerStyle={styles.content}
@@ -224,6 +272,65 @@ export function LogNCRScreen({ navigation }: Props) {
               textAlignVertical="top"
             />
           </FormField>
+
+          <View style={styles.aiBlock}>
+            <QuickActionButton
+              label={suggesting ? 'Analyzing…' : 'Suggest Standard with AI'}
+              variant="outline"
+              icon="sparkles-outline"
+              onPress={onSuggestStandards}
+              disabled={!canSuggest || suggesting}
+              fullWidth
+            />
+            {!canSuggest ? (
+              <Text style={styles.aiHint}>
+                Fill in Title and Description to get an AI standard recommendation.
+              </Text>
+            ) : null}
+            {suggestion ? (
+              <View style={styles.aiCard}>
+                <View style={styles.aiCardHeader}>
+                  <Ionicons name="sparkles" size={15} color={Colors.amber} />
+                  <Text style={styles.aiCardTitle}>AI Recommendation</Text>
+                </View>
+                <Text style={styles.aiRecommendation}>{suggestion.recommendation}</Text>
+                {suggestion.standards.length > 0 ? (
+                  <>
+                    <Text style={styles.aiSelectHint}>
+                      Tap any that apply — they’ll be saved with this NCR.
+                    </Text>
+                    <View style={styles.chipWrap}>
+                      {suggestion.standards.map((s) => {
+                        const on = selectedClauses.includes(s);
+                        return (
+                          <Pressable
+                            key={s}
+                            onPress={() => toggleClause(s)}
+                            style={({ pressed }) => [
+                              styles.chip,
+                              on && styles.chipOn,
+                              pressed && { opacity: 0.85 },
+                            ]}
+                          >
+                            <Ionicons
+                              name={on ? 'checkmark-circle' : 'ellipse-outline'}
+                              size={15}
+                              color={on ? Colors.card : Colors.steelBlue}
+                            />
+                            <Text style={[styles.chipText, on && styles.chipTextOn]}>{s}</Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  </>
+                ) : (
+                  <Text style={styles.aiHint}>
+                    No specific clause identified — select a reference manually above.
+                  </Text>
+                )}
+              </View>
+            ) : null}
+          </View>
 
           <FormField label="Photo Evidence" hint="Attach photos to support your documentation">
             <View style={styles.photoButtonsRow}>
@@ -458,5 +565,75 @@ const styles = StyleSheet.create({
     color: Colors.secondaryText,
     textAlign: 'center',
     marginTop: Spacing.sm,
+  },
+  aiBlock: {
+    marginBottom: Spacing.lg,
+    gap: Spacing.sm,
+  },
+  aiHint: {
+    fontSize: 12,
+    color: Colors.secondaryText,
+    lineHeight: 17,
+  },
+  aiCard: {
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: Colors.amber + '50',
+    borderRadius: Radii.card,
+    padding: Spacing.lg,
+    gap: Spacing.sm,
+    ...Shadow.card,
+  },
+  aiCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  aiCardTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    color: Colors.amber,
+    textTransform: 'uppercase',
+  },
+  aiRecommendation: {
+    fontSize: 14,
+    color: Colors.bodyText,
+    lineHeight: 20,
+  },
+  aiSelectHint: {
+    fontSize: 12,
+    color: Colors.secondaryText,
+    marginTop: 2,
+  },
+  chipWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+  },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: Radii.button,
+    borderWidth: 1,
+    borderColor: Colors.steelBlue + '50',
+    backgroundColor: Colors.steelBlue + '12',
+    minHeight: 44,
+  },
+  chipOn: {
+    backgroundColor: Colors.steelBlue,
+    borderColor: Colors.steelBlue,
+  },
+  chipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.steelBlue,
+    flexShrink: 1,
+  },
+  chipTextOn: {
+    color: Colors.card,
   },
 });

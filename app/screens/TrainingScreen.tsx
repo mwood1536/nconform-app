@@ -6,7 +6,6 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AdBanner } from '../components/AdBanner';
-import { FeatureLock } from '../components/FeatureLock';
 import { QuickActionButton } from '../components/QuickActionButton';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { Colors, Radii, Shadow, Spacing } from '../constants/colors';
@@ -17,7 +16,7 @@ import { RootStackParamList, TabParamList } from '../navigation/types';
 import { TrainingRecord } from '../types';
 import { formatDate, nowISO } from '../utils/ncrHelpers';
 import { buildTrainingHTML, generateAndSharePDF } from '../utils/reports';
-import { adsEnabled, isBundle } from '../utils/subscription';
+import { adsEnabled } from '../utils/subscription';
 import { effectiveTrainingStatus, trainingStatusColor } from '../utils/training';
 
 type Props = CompositeScreenProps<
@@ -91,29 +90,6 @@ export function TrainingScreen({ navigation }: Props) {
       setExporting(false);
     }
   };
-
-  if (!isBundle(profile)) {
-    return (
-      <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-        <ScreenHeader title="Training" subtitle="Training sign-offs" />
-        <FeatureLock
-          tier="bundle"
-          title="Training Sign-Offs"
-          description="Maintain an audit-ready training register with digital sign-offs across your team."
-          bullets={[
-            'Record training by employee, topic, and trainer',
-            'Digital acknowledgment with signed statement',
-            'Pending / Complete / Overdue tracking',
-            'Export the full register as a PDF',
-          ]}
-          onUpgrade={() => navigation.navigate('Settings')}
-        />
-        {adsEnabled(profile) ? (
-          <AdBanner visible onUpgrade={() => navigation.navigate('Settings')} />
-        ) : null}
-      </SafeAreaView>
-    );
-  }
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
@@ -216,6 +192,9 @@ export function TrainingScreen({ navigation }: Props) {
           fullWidth
         />
       </ScrollView>
+      {adsEnabled(profile) ? (
+        <AdBanner visible onUpgrade={() => navigation.navigate('Settings')} />
+      ) : null}
     </SafeAreaView>
   );
 }

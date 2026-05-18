@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Colors, Spacing } from '../constants/colors';
+import { NetworkStatusIcon } from './NetworkStatusIcon';
 
 interface Props {
   title: string;
@@ -32,6 +33,7 @@ export function ScreenHeader({ title, subtitle, onBack, rightIcon, onRightPress 
             </Text>
           ) : null}
         </View>
+        <NetworkStatusIcon />
         {rightIcon && onRightPress ? (
           <Pressable onPress={onRightPress} hitSlop={10} style={styles.iconBtn}>
             <Ionicons name={rightIcon} size={22} color={Colors.navy} />
