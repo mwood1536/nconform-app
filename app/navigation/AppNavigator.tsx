@@ -4,11 +4,18 @@ import React from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { Colors } from '../constants/colors';
 import { useProfile } from '../hooks/useProfile';
+import { ActionsScreen } from '../screens/ActionsScreen';
 import { AICorrectiveActionScreen } from '../screens/AICorrectiveActionScreen';
+import { AuditBuilderScreen } from '../screens/AuditBuilderScreen';
+import { AuditExecutionScreen } from '../screens/AuditExecutionScreen';
 import { LogNCRScreen } from '../screens/LogNCRScreen';
 import { NCRDetailScreen } from '../screens/NCRDetailScreen';
 import { OnboardingScreen } from '../screens/OnboardingScreen';
+import { OnePagerScreen } from '../screens/OnePagerScreen';
+import { ReportsScreen } from '../screens/ReportsScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
+import { TrainingFormScreen } from '../screens/TrainingFormScreen';
+import { UserDirectoryScreen } from '../screens/UserDirectoryScreen';
 import { BottomTabNavigator } from './BottomTabNavigator';
 import { RootStackParamList } from './types';
 
@@ -43,9 +50,21 @@ export function AppNavigator() {
           options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
         />
         <Stack.Screen name="NCRDetail" component={NCRDetailScreen} />
+        <Stack.Screen name="AICorrectiveAction" component={AICorrectiveActionScreen} />
+        <Stack.Screen name="Reports" component={ReportsScreen} />
+        <Stack.Screen name="Actions" component={ActionsScreen} />
+        <Stack.Screen name="OnePager" component={OnePagerScreen} />
+        <Stack.Screen name="UserDirectory" component={UserDirectoryScreen} />
         <Stack.Screen
-          name="AICorrectiveAction"
-          component={AICorrectiveActionScreen}
+          name="AuditBuilder"
+          component={AuditBuilderScreen}
+          options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
+        />
+        <Stack.Screen name="AuditExecution" component={AuditExecutionScreen} />
+        <Stack.Screen
+          name="TrainingForm"
+          component={TrainingFormScreen}
+          options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
         />
         <Stack.Screen
           name="Settings"

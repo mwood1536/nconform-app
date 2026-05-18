@@ -68,6 +68,7 @@ export function OnboardingScreen({ navigation }: Props) {
         challenge: draft.challenge,
         subscriptionTier: 'free',
         notificationsEnabled: true,
+        rcaConnected: false,
         onboardedAt: nowISO(),
       };
       await save(profile);

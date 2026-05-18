@@ -1,41 +1,23 @@
 import { Ionicons } from '@expo/vector-icons';
-import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
-import { CompositeScreenProps, useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import * as MediaLibrary from 'expo-media-library';
-import React, { useCallback, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { captureRef } from 'react-native-view-shot';
-import { OptionSheet } from '../components/OptionSheet';
 import { QuickActionButton } from '../components/QuickActionButton';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { Colors, Radii, Shadow, Spacing } from '../constants/colors';
 import { useNCRs } from '../hooks/useNCRs';
 import { useProfile } from '../hooks/useProfile';
-import { RootStackParamList, TabParamList } from '../navigation/types';
-import { NCR } from '../types';
-import { generateOnePagerSummary } from '../utils/apiHelpers';
-import { formatDate } from '../utils/ncrHelpers';
+import { RootStackParamList } from '../navigation/types';
 import {
   buildCorrectiveActionHTML,
   buildNCRSummaryHTML,
   generateAndSharePDF,
 } from '../utils/reports';
+import { isProOrBundle, Pricing } from '../utils/subscription';
 
-type Props = CompositeScreenProps<
-  BottomTabScreenProps<TabParamList, 'Reports'>,
-  NativeStackScreenProps<RootStackParamList>
->;
+type Props = NativeStackScreenProps<RootStackParamList, 'Reports'>;
 
 type StatusFilter = 'All' | 'Open' | 'In Progress' | 'Closed';
 type SeverityFilter = 'All' | 'Low' | 'Medium' | 'High' | 'Critical';
@@ -46,7 +28,7 @@ const SEVERITY_FILTERS: SeverityFilter[] = ['All', 'Low', 'Medium', 'High', 'Cri
 export function ReportsScreen({ navigation }: Props) {
   const { ncrs, reload } = useNCRs();
   const { profile } = useProfile();
-  const isPro = (profile?.subscriptionTier ?? 'free') !== 'free';
+  const isPro = isProOrBundle(profile);
 
   useFocusEffect(
     useCallback(() => {
@@ -58,19 +40,11 @@ export function ReportsScreen({ navigation }: Props) {
   const [severityFilter, setSeverityFilter] = useState<SeverityFilter>('All');
   const [generating, setGenerating] = useState<string | null>(null);
 
-  // One Pager state
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [selectedNCR, setSelectedNCR] = useState<NCR | null>(null);
-  const [onePagerVisible, setOnePagerVisible] = useState(false);
-  const [onePagerText, setOnePagerText] = useState('');
-  const [onePagerLoading, setOnePagerLoading] = useState(false);
-  const onePagerRef = useRef<View>(null);
-
   const requireProGate = (): boolean => {
     if (isPro) return true;
     Alert.alert(
       'NConform Pro Required',
-      'Unlock PDF exports and AI one-pagers with NConform Pro for $4.99.',
+      `Unlock PDF exports and the One Pager Builder with NConform Pro for ${Pricing.pro.price}.`,
       [
         { text: 'Maybe later', style: 'cancel' },
         { text: 'Upgrade', onPress: () => navigation.navigate('Settings') },
@@ -85,7 +59,7 @@ export function ReportsScreen({ navigation }: Props) {
     try {
       const html = buildNCRSummaryHTML(ncrs, { status: statusFilter, severity: severityFilter });
       await generateAndSharePDF(html, 'NCR-Summary.pdf');
-    } catch (err) {
+    } catch {
       Alert.alert('Could not generate report', 'Please try again.');
     } finally {
       setGenerating(null);
@@ -98,65 +72,21 @@ export function ReportsScreen({ navigation }: Props) {
     try {
       const html = buildCorrectiveActionHTML(ncrs);
       await generateAndSharePDF(html, 'Corrective-Actions.pdf');
-    } catch (err) {
+    } catch {
       Alert.alert('Could not generate report', 'Please try again.');
     } finally {
       setGenerating(null);
     }
   };
 
-  const onSelectOnePager = () => {
-    if (!requireProGate()) return;
-    if (ncrs.length === 0) {
-      Alert.alert('No NCRs available', 'Log at least one nonconformance to generate a one-pager.');
-      return;
-    }
-    setPickerOpen(true);
-  };
-
-  const onPickNCRForOnePager = async (ncrNumber: string) => {
-    setPickerOpen(false);
-    const ncr = ncrs.find((n) => n.ncrNumber === ncrNumber) ?? null;
-    setSelectedNCR(ncr);
-    if (!ncr) return;
-    setOnePagerVisible(true);
-    setOnePagerLoading(true);
-    setOnePagerText('');
-    try {
-      const text = await generateOnePagerSummary(ncr, profile?.standard ?? '');
-      setOnePagerText(text);
-    } catch (err) {
-      setOnePagerText(
-        `${ncr.ncrNumber} — ${ncr.title}\nSeverity: ${ncr.severity}\nStatus: ${ncr.status}\n\n${ncr.description}`,
-      );
-    } finally {
-      setOnePagerLoading(false);
-    }
-  };
-
-  const onSaveOnePagerImage = async () => {
-    if (!onePagerRef.current) return;
-    try {
-      const perm = await MediaLibrary.requestPermissionsAsync();
-      if (!perm.granted) {
-        Alert.alert('Photos access required', 'Allow photo library access to save the one-pager.');
-        return;
-      }
-      const uri = await captureRef(onePagerRef, { format: 'png', quality: 1 });
-      await MediaLibrary.saveToLibraryAsync(uri);
-      Alert.alert('Saved', 'One-pager saved to your photo library.');
-    } catch (err) {
-      Alert.alert('Could not save', 'Please try again.');
-    }
-  };
-
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-      <ScreenHeader title="Reports" subtitle="Audit-ready exports" />
-      <ScrollView
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-      >
+      <ScreenHeader
+        title="Reports"
+        subtitle="Audit-ready exports"
+        onBack={() => navigation.goBack()}
+      />
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <ReportCard
           icon="document-text-outline"
           title="NCR Summary Report"
@@ -203,33 +133,32 @@ export function ReportsScreen({ navigation }: Props) {
           description="All open and closed corrective actions with target dates and overdue flags."
           locked={!isPro}
         >
-          <View>
-            <QuickActionButton
-              label={generating === 'ca' ? 'Generating…' : 'Generate PDF'}
-              variant="primary"
-              icon="document-outline"
-              onPress={onGenerateCAStatus}
-              disabled={generating === 'ca'}
-              fullWidth
-            />
-          </View>
+          <QuickActionButton
+            label={generating === 'ca' ? 'Generating…' : 'Generate PDF'}
+            variant="primary"
+            icon="document-outline"
+            onPress={onGenerateCAStatus}
+            disabled={generating === 'ca'}
+            fullWidth
+          />
         </ReportCard>
 
         <ReportCard
           icon="newspaper-outline"
-          title="One Pager"
-          description="AI-generated executive summary saved as an image — perfect for leadership review."
+          title="One Pager Builder"
+          description="Pick the blocks, let AI write an executive summary, and save a branded card."
           locked={!isPro}
         >
-          <View>
-            <QuickActionButton
-              label="Generate One Pager"
-              variant="amber"
-              icon="sparkles-outline"
-              onPress={onSelectOnePager}
-              fullWidth
-            />
-          </View>
+          <QuickActionButton
+            label="Open One Pager Builder"
+            variant="amber"
+            icon="sparkles-outline"
+            onPress={() => {
+              if (!requireProGate()) return;
+              navigation.navigate('OnePager');
+            }}
+            fullWidth
+          />
         </ReportCard>
 
         {!isPro ? (
@@ -240,86 +169,19 @@ export function ReportsScreen({ navigation }: Props) {
             <View style={{ flex: 1 }}>
               <Text style={styles.proCtaTitle}>Unlock NConform Pro</Text>
               <Text style={styles.proCtaBody}>
-                PDF exports, AI one-pagers, and ad-free experience for $4.99.
+                PDF exports, One Pager Builder, and ad-free for {Pricing.pro.price}.
               </Text>
             </View>
             <Ionicons name="lock-closed" size={20} color={Colors.amber} />
           </Pressable>
         ) : null}
       </ScrollView>
-
-      <OptionSheet
-        visible={pickerOpen}
-        title="Select an NCR"
-        options={ncrs.map((n) => `${n.ncrNumber} · ${n.title || 'Untitled'}`)}
-        selected={null}
-        onSelect={(label) => {
-          const number = label.split(' · ')[0];
-          void onPickNCRForOnePager(number);
-        }}
-        onClose={() => setPickerOpen(false)}
-      />
-
-      <Modal
-        visible={onePagerVisible}
-        animationType="slide"
-        onRequestClose={() => setOnePagerVisible(false)}
-      >
-        <SafeAreaView style={styles.modalSafe} edges={['top', 'left', 'right']}>
-          <ScreenHeader
-            title="One Pager"
-            subtitle={selectedNCR?.ncrNumber ?? ''}
-            onBack={() => setOnePagerVisible(false)}
-          />
-          <ScrollView contentContainerStyle={styles.modalContent}>
-            {onePagerLoading ? (
-              <View style={styles.modalLoading}>
-                <ActivityIndicator color={Colors.navy} />
-                <Text style={styles.modalLoadingText}>Drafting executive summary…</Text>
-              </View>
-            ) : null}
-            <View
-              ref={onePagerRef}
-              collapsable={false}
-              style={styles.onePager}
-            >
-              <Text style={styles.onePagerEyebrow}>NCONFORM · EXECUTIVE SUMMARY</Text>
-              <Text style={styles.onePagerTitle}>
-                {selectedNCR?.ncrNumber} — {selectedNCR?.title}
-              </Text>
-              <View style={styles.onePagerMetaRow}>
-                <Text style={styles.onePagerMeta}>Severity: {selectedNCR?.severity}</Text>
-                <Text style={styles.onePagerMeta}>Status: {selectedNCR?.status}</Text>
-                <Text style={styles.onePagerMeta}>
-                  Created: {selectedNCR ? formatDate(selectedNCR.createdAt) : ''}
-                </Text>
-              </View>
-              <View style={styles.onePagerDivider} />
-              <Text style={styles.onePagerBody}>
-                {onePagerText || (onePagerLoading ? '' : 'No summary generated.')}
-              </Text>
-              <Text style={styles.onePagerFooter}>IRONSTRATOS LLC</Text>
-            </View>
-            {!onePagerLoading ? (
-              <View style={styles.modalActions}>
-                <QuickActionButton
-                  label="Save to Photos"
-                  variant="primary"
-                  icon="image-outline"
-                  onPress={onSaveOnePagerImage}
-                  fullWidth
-                />
-              </View>
-            ) : null}
-          </ScrollView>
-        </SafeAreaView>
-      </Modal>
     </SafeAreaView>
   );
 }
 
 interface ReportCardProps {
-  icon: keyof typeof import('@expo/vector-icons').Ionicons.glyphMap;
+  icon: keyof typeof Ionicons.glyphMap;
   title: string;
   description: string;
   locked: boolean;
@@ -361,11 +223,7 @@ function FilterPill({ label, active, onPress }: FilterPillProps) {
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [
-        styles.pill,
-        active && styles.pillActive,
-        pressed && { opacity: 0.85 },
-      ]}
+      style={({ pressed }) => [styles.pill, active && styles.pillActive, pressed && { opacity: 0.85 }]}
     >
       <Text style={[styles.pillLabel, active && styles.pillLabelActive]}>{label}</Text>
     </Pressable>
@@ -492,74 +350,5 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 2,
     lineHeight: 18,
-  },
-  modalSafe: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  modalContent: {
-    paddingHorizontal: Spacing.xl,
-    paddingBottom: Spacing.xxl,
-    gap: Spacing.md,
-  },
-  modalLoading: {
-    alignItems: 'center',
-    paddingVertical: Spacing.xl,
-    gap: Spacing.sm,
-  },
-  modalLoadingText: {
-    color: Colors.secondaryText,
-    fontSize: 13,
-  },
-  onePager: {
-    backgroundColor: Colors.card,
-    borderRadius: Radii.card,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    padding: Spacing.xl,
-    minHeight: 480,
-  },
-  onePagerEyebrow: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: Colors.amber,
-    letterSpacing: 1.2,
-    marginBottom: 6,
-  },
-  onePagerTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: Colors.navy,
-    letterSpacing: -0.3,
-  },
-  onePagerMetaRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.md,
-    marginTop: Spacing.sm,
-  },
-  onePagerMeta: {
-    fontSize: 12,
-    color: Colors.secondaryText,
-    fontWeight: '600',
-  },
-  onePagerDivider: {
-    height: 1,
-    backgroundColor: Colors.border,
-    marginVertical: Spacing.lg,
-  },
-  onePagerBody: {
-    fontSize: 14,
-    color: Colors.bodyText,
-    lineHeight: 22,
-  },
-  onePagerFooter: {
-    marginTop: Spacing.xl,
-    fontSize: 11,
-    color: Colors.secondaryText,
-    letterSpacing: 1.4,
-  },
-  modalActions: {
-    paddingTop: Spacing.md,
   },
 });

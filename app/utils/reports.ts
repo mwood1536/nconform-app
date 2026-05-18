@@ -1,6 +1,6 @@
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-import { NCR } from '../types';
+import { NCR, TrainingRecord } from '../types';
 import { formatDate } from './ncrHelpers';
 
 function escapeHTML(s: string): string {
@@ -13,12 +13,12 @@ function escapeHTML(s: string): string {
 
 const baseStyles = `
   body { font-family: -apple-system, Helvetica, Arial, sans-serif; color: #1A1A2E; padding: 32px; }
-  h1 { color: #0A1628; font-size: 24px; margin-bottom: 4px; }
-  h2 { color: #0A1628; font-size: 16px; margin-top: 24px; margin-bottom: 8px; border-bottom: 1px solid #E2E8F0; padding-bottom: 6px; }
+  h1 { color: #1B2A4A; font-size: 24px; margin-bottom: 4px; }
+  h2 { color: #1B2A4A; font-size: 16px; margin-top: 24px; margin-bottom: 8px; border-bottom: 1px solid #E2E8F0; padding-bottom: 6px; }
   .meta { color: #6B7280; font-size: 11px; margin-bottom: 24px; letter-spacing: 1px; text-transform: uppercase; }
   table { width: 100%; border-collapse: collapse; margin-top: 8px; }
   th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #E2E8F0; font-size: 12px; }
-  th { background: #F8F9FB; color: #0A1628; font-size: 11px; letter-spacing: .5px; text-transform: uppercase; }
+  th { background: #F8F9FB; color: #1B2A4A; font-size: 11px; letter-spacing: .5px; text-transform: uppercase; }
   .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; }
   .sev-Low { background: #6B72801A; color: #6B7280; }
   .sev-Medium { background: #D4A0171A; color: #D4A017; }
@@ -107,6 +107,41 @@ export function buildCorrectiveActionHTML(ncrs: NCR[]): string {
       <tbody>${rows || '<tr><td colspan="6" style="text-align:center;color:#6B7280;">No corrective actions yet.</td></tr>'}</tbody>
     </table>
     <div class="footer">IRONSTRATOS LLC · Generated ${escapeHTML(new Date().toLocaleString())}</div>
+  </body></html>`;
+}
+
+export function buildTrainingHTML(records: TrainingRecord[]): string {
+  const rows = records
+    .map(
+      (r) => `
+      <tr>
+        <td><strong>${escapeHTML(r.employeeName)}</strong></td>
+        <td>${escapeHTML(r.topic)}</td>
+        <td>${escapeHTML(r.standardRef || '—')}</td>
+        <td>${escapeHTML(r.trainerName || '—')}</td>
+        <td>${escapeHTML(r.dateCompleted ? formatDate(r.dateCompleted) : '—')}</td>
+        <td>${escapeHTML(r.status)}</td>
+        <td>${escapeHTML(r.signedAt ? `Signed ${formatDate(r.signedAt)}` : 'Not signed')}</td>
+      </tr>`,
+    )
+    .join('');
+
+  return `<!doctype html><html><head><meta charset="utf-8" /><style>${baseStyles}</style></head>
+  <body>
+    <div class="meta">NConform · Training Sign-Off Register</div>
+    <h1>Training Sign-Off Register</h1>
+    <div style="color:#6B7280;font-size:12px;">${records.length} record${
+      records.length === 1 ? '' : 's'
+    }</div>
+    <table>
+      <thead>
+        <tr><th>Employee</th><th>Topic</th><th>Reference</th><th>Trainer</th><th>Completed</th><th>Status</th><th>Sign-Off</th></tr>
+      </thead>
+      <tbody>${rows || '<tr><td colspan="7" style="text-align:center;color:#6B7280;">No training records.</td></tr>'}</tbody>
+    </table>
+    <div class="footer">IRONSTRATOS LLC · SMITHS STATION, ALABAMA · Generated ${escapeHTML(
+      new Date().toLocaleString(),
+    )}</div>
   </body></html>`;
 }
 

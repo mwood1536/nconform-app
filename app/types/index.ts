@@ -1,5 +1,9 @@
 import {
   ActionStatus,
+  AuditLayer,
+  AuditResponseType,
+  AuditStandard,
+  AuditStatus,
   Challenge,
   DetectionPoint,
   Industry,
@@ -8,9 +12,10 @@ import {
   Severity,
   StandardReference,
   TeamSize,
+  TrainingStatus,
 } from '../constants/standards';
 
-export type SubscriptionTier = 'free' | 'pro' | 'team';
+export type SubscriptionTier = 'free' | 'pro' | 'bundle';
 
 export interface UserProfile {
   name: string;
@@ -22,6 +27,7 @@ export interface UserProfile {
   challenge: Challenge | '';
   subscriptionTier: SubscriptionTier;
   notificationsEnabled: boolean;
+  rcaConnected: boolean;
   onboardedAt: string;
 }
 
@@ -79,6 +85,7 @@ export interface NCR {
   status: NCRStatus;
   createdAt: string;
   updatedAt: string;
+  sharedWithRCA: boolean;
   correctiveAction: CorrectiveAction | null;
   actions: Action[];
   timeline: TimelineEvent[];
@@ -92,4 +99,63 @@ export interface AIcorrectiveActionResponse {
   preventiveAction: string;
   standardReference: string;
   verificationMethod: string;
+}
+
+export interface AuditQuestion {
+  id: string;
+  prompt: string;
+  requiresPhoto: boolean;
+}
+
+export interface AuditResponse {
+  questionId: string;
+  result: AuditResponseType | null;
+  note: string;
+  photo: string | null;
+}
+
+export interface AuditTemplate {
+  id: string;
+  name: string;
+  layer: AuditLayer;
+  standard: AuditStandard;
+  questions: AuditQuestion[];
+  createdAt: string;
+}
+
+export interface Audit {
+  id: string;
+  templateId: string | null;
+  name: string;
+  layer: AuditLayer;
+  standard: AuditStandard;
+  questions: AuditQuestion[];
+  responses: AuditResponse[];
+  passRate: number;
+  status: AuditStatus;
+  assignedTo: string;
+  createdAt: string;
+  completedAt: string | null;
+}
+
+export interface TrainingRecord {
+  id: string;
+  employeeName: string;
+  topic: string;
+  standardRef: string;
+  trainerName: string;
+  dateCompleted: string;
+  notes: string;
+  photo: string | null;
+  signOffStatement: string | null;
+  signedAt: string | null;
+  status: TrainingStatus;
+  createdAt: string;
+}
+
+export interface TeamMember {
+  id: string;
+  name: string;
+  role: string;
+  email: string;
 }

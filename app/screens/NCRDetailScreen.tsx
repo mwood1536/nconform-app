@@ -11,11 +11,13 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { AssigneeField } from '../components/AssigneeField';
 import { QuickActionButton } from '../components/QuickActionButton';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { SeverityBadge } from '../components/SeverityBadge';
@@ -31,7 +33,8 @@ type Props = NativeStackScreenProps<RootStackParamList, 'NCRDetail'>;
 
 export function NCRDetailScreen({ navigation, route }: Props) {
   const { ncrId } = route.params;
-  const { ncrs, reload, setStatus, addAction, toggleAction, deleteNCR } = useNCRs();
+  const { ncrs, reload, setStatus, addAction, toggleAction, setRCAShared, deleteNCR } =
+    useNCRs();
 
   useFocusEffect(
     useCallback(() => {
@@ -121,6 +124,12 @@ export function NCRDetailScreen({ navigation, route }: Props) {
             <StatusBadge status={overdue ? 'Overdue' : ncr.status} />
             <SeverityBadge severity={ncr.severity} />
           </View>
+          {ncr.sharedWithRCA ? (
+            <View style={styles.sharedBadge}>
+              <Ionicons name="git-network-outline" size={12} color={Colors.steelBlue} />
+              <Text style={styles.sharedBadgeText}>SHARED WITH ROOT CAUSE AI</Text>
+            </View>
+          ) : null}
           <Text style={styles.title}>{ncr.title}</Text>
 
           <View style={styles.metaGrid}>
@@ -156,6 +165,34 @@ export function NCRDetailScreen({ navigation, route }: Props) {
                 ))}
               </ScrollView>
             </>
+          ) : null}
+        </View>
+
+        <View style={styles.rcaCard}>
+          <View style={styles.rcaRow}>
+            <View style={styles.rcaIcon}>
+              <Ionicons name="git-network-outline" size={18} color={Colors.steelBlue} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.rcaTitle}>Share with Root Cause AI</Text>
+              <Text style={styles.rcaSub}>
+                Flag this NCR for the Root Cause AI workspace.
+              </Text>
+            </View>
+            <Switch
+              value={ncr.sharedWithRCA}
+              onValueChange={(v) => setRCAShared(ncr.id, v)}
+              trackColor={{ false: Colors.border, true: Colors.steelBlue }}
+              thumbColor={Colors.card}
+            />
+          </View>
+          {ncr.sharedWithRCA ? (
+            <View style={styles.rcaNote}>
+              <Ionicons name="information-circle-outline" size={15} color={Colors.steelBlue} />
+              <Text style={styles.rcaNoteText}>
+                When connected, this NCR will appear in Root Cause AI.
+              </Text>
+            </View>
           ) : null}
         </View>
 
@@ -281,12 +318,10 @@ export function NCRDetailScreen({ navigation, route }: Props) {
               placeholderTextColor={Colors.secondaryText}
               multiline
             />
-            <TextInput
-              style={styles.input}
+            <AssigneeField
               value={actionAssignee}
-              onChangeText={setActionAssignee}
+              onChange={setActionAssignee}
               placeholder="Assign to"
-              placeholderTextColor={Colors.secondaryText}
             />
             <Pressable
               onPress={() => setShowDate(true)}
@@ -595,9 +630,75 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingVertical: Spacing.md,
   },
+  sharedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 5,
+    marginTop: Spacing.sm,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: Radii.pill,
+    backgroundColor: Colors.steelBlue + '14',
+    borderColor: Colors.steelBlue + '40',
+    borderWidth: 1,
+  },
+  sharedBadgeText: {
+    color: Colors.steelBlue,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+  },
+  rcaCard: {
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: Radii.card,
+    padding: Spacing.lg,
+    gap: Spacing.md,
+    ...Shadow.card,
+  },
+  rcaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  rcaIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.steelBlue + '14',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rcaTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: Colors.navy,
+  },
+  rcaSub: {
+    fontSize: 12,
+    color: Colors.secondaryText,
+    marginTop: 2,
+  },
+  rcaNote: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+    backgroundColor: Colors.steelBlue + '10',
+    borderRadius: Radii.button,
+    padding: Spacing.sm,
+  },
+  rcaNoteText: {
+    flex: 1,
+    fontSize: 12,
+    color: Colors.steelBlue,
+    fontWeight: '600',
+    lineHeight: 17,
+  },
   modalBackdrop: {
     flex: 1,
-    backgroundColor: '#0A1628B3',
+    backgroundColor: '#1B2A4AB3',
     justifyContent: 'flex-end',
   },
   modalSheet: {

@@ -26,6 +26,7 @@ interface UseNCRsResult {
   addAction: (id: string, action: Omit<Action, 'id' | 'ncrId' | 'createdAt'>) => Promise<void>;
   toggleAction: (ncrId: string, actionId: string) => Promise<void>;
   appendTimeline: (id: string, event: Omit<TimelineEvent, 'id' | 'timestamp'>) => Promise<void>;
+  setRCAShared: (id: string, shared: boolean) => Promise<void>;
   deleteNCR: (id: string) => Promise<void>;
 }
 
@@ -69,6 +70,7 @@ export function useNCRs(): UseNCRsResult {
         status: 'Open',
         createdAt: ts,
         updatedAt: ts,
+        sharedWithRCA: false,
         correctiveAction: null,
         actions: [],
         timeline: [
@@ -235,6 +237,29 @@ export function useNCRs(): UseNCRsResult {
     [persist],
   );
 
+  const setRCAShared = useCallback<UseNCRsResult['setRCAShared']>(
+    async (id, shared) => {
+      const all = await Storage.getNCRs();
+      const idx = all.findIndex((n) => n.id === id);
+      if (idx === -1) return;
+      all[idx] = {
+        ...all[idx],
+        sharedWithRCA: shared,
+        updatedAt: nowISO(),
+        timeline: [
+          ...all[idx].timeline,
+          {
+            id: generateId('tl'),
+            label: shared ? 'Shared with Root Cause AI' : 'Unshared from Root Cause AI',
+            timestamp: nowISO(),
+          },
+        ],
+      };
+      await persist(all);
+    },
+    [persist],
+  );
+
   const deleteNCR = useCallback<UseNCRsResult['deleteNCR']>(
     async (id) => {
       const all = await Storage.getNCRs();
@@ -263,6 +288,7 @@ export function useNCRs(): UseNCRsResult {
     addAction,
     toggleAction,
     appendTimeline,
+    setRCAShared,
     deleteNCR,
   };
 }

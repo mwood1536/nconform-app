@@ -1,5 +1,15 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Action, CorrectiveAction, NCR, UserProfile } from '../types';
+import {
+  Action,
+  Audit,
+  AuditTemplate,
+  CorrectiveAction,
+  NCR,
+  SubscriptionTier,
+  TeamMember,
+  TrainingRecord,
+  UserProfile,
+} from '../types';
 
 export const StorageKeys = {
   userProfile: 'userProfile',
@@ -7,6 +17,10 @@ export const StorageKeys = {
   correctiveActions: 'correctiveActions',
   actions: 'actions',
   ncrCounter: 'ncrCounter',
+  audits: 'audits',
+  auditTemplates: 'auditTemplates',
+  trainingRecords: 'trainingRecords',
+  teamDirectory: 'teamDirectory',
 } as const;
 
 async function readJSON<T>(key: string, fallback: T): Promise<T> {
@@ -23,9 +37,32 @@ async function writeJSON<T>(key: string, value: T): Promise<void> {
   await AsyncStorage.setItem(key, JSON.stringify(value));
 }
 
+// Normalize legacy profiles: the retired "team" tier maps to "bundle",
+// and fields added after launch get safe defaults.
+function normalizeProfile(raw: UserProfile | null): UserProfile | null {
+  if (!raw) return null;
+  const legacyTier = raw.subscriptionTier as SubscriptionTier | 'team';
+  const subscriptionTier: SubscriptionTier =
+    legacyTier === 'team'
+      ? 'bundle'
+      : legacyTier === 'pro' || legacyTier === 'bundle'
+        ? legacyTier
+        : 'free';
+  return {
+    ...raw,
+    subscriptionTier,
+    rcaConnected: raw.rcaConnected ?? false,
+  };
+}
+
+// NCRs created before the RCA toggle existed default to not shared.
+function normalizeNCR(raw: NCR): NCR {
+  return { ...raw, sharedWithRCA: raw.sharedWithRCA ?? false };
+}
+
 export const Storage = {
   async getProfile(): Promise<UserProfile | null> {
-    return readJSON<UserProfile | null>(StorageKeys.userProfile, null);
+    return normalizeProfile(await readJSON<UserProfile | null>(StorageKeys.userProfile, null));
   },
   async setProfile(profile: UserProfile): Promise<void> {
     await writeJSON(StorageKeys.userProfile, profile);
@@ -35,7 +72,8 @@ export const Storage = {
   },
 
   async getNCRs(): Promise<NCR[]> {
-    return readJSON<NCR[]>(StorageKeys.ncrs, []);
+    const ncrs = await readJSON<NCR[]>(StorageKeys.ncrs, []);
+    return ncrs.map(normalizeNCR);
   },
   async setNCRs(ncrs: NCR[]): Promise<void> {
     await writeJSON(StorageKeys.ncrs, ncrs);
@@ -55,6 +93,34 @@ export const Storage = {
     await writeJSON(StorageKeys.actions, actions);
   },
 
+  async getAudits(): Promise<Audit[]> {
+    return readJSON<Audit[]>(StorageKeys.audits, []);
+  },
+  async setAudits(audits: Audit[]): Promise<void> {
+    await writeJSON(StorageKeys.audits, audits);
+  },
+
+  async getAuditTemplates(): Promise<AuditTemplate[]> {
+    return readJSON<AuditTemplate[]>(StorageKeys.auditTemplates, []);
+  },
+  async setAuditTemplates(templates: AuditTemplate[]): Promise<void> {
+    await writeJSON(StorageKeys.auditTemplates, templates);
+  },
+
+  async getTrainingRecords(): Promise<TrainingRecord[]> {
+    return readJSON<TrainingRecord[]>(StorageKeys.trainingRecords, []);
+  },
+  async setTrainingRecords(records: TrainingRecord[]): Promise<void> {
+    await writeJSON(StorageKeys.trainingRecords, records);
+  },
+
+  async getTeamDirectory(): Promise<TeamMember[]> {
+    return readJSON<TeamMember[]>(StorageKeys.teamDirectory, []);
+  },
+  async setTeamDirectory(members: TeamMember[]): Promise<void> {
+    await writeJSON(StorageKeys.teamDirectory, members);
+  },
+
   async nextNCRNumber(): Promise<string> {
     const current = await readJSON<number>(StorageKeys.ncrCounter, 0);
     const next = current + 1;
@@ -69,6 +135,10 @@ export const Storage = {
       StorageKeys.correctiveActions,
       StorageKeys.actions,
       StorageKeys.ncrCounter,
+      StorageKeys.audits,
+      StorageKeys.auditTemplates,
+      StorageKeys.trainingRecords,
+      StorageKeys.teamDirectory,
     ]);
   },
 };

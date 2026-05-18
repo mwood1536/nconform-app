@@ -1,6 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
-import { CompositeScreenProps, useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
@@ -14,14 +13,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { Colors, Radii, Shadow, Spacing } from '../constants/colors';
 import { useNCRs } from '../hooks/useNCRs';
-import { RootStackParamList, TabParamList } from '../navigation/types';
+import { RootStackParamList } from '../navigation/types';
 import { Action, NCR } from '../types';
 import { formatDate } from '../utils/ncrHelpers';
 
-type Props = CompositeScreenProps<
-  BottomTabScreenProps<TabParamList, 'Actions'>,
-  NativeStackScreenProps<RootStackParamList>
->;
+type Props = NativeStackScreenProps<RootStackParamList, 'Actions'>;
 
 type ActionFilter = 'All' | 'Open' | 'Overdue' | 'Completed';
 const FILTERS: ActionFilter[] = ['All', 'Open', 'Overdue', 'Completed'];
@@ -82,7 +78,11 @@ export function ActionsScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-      <ScreenHeader title="Actions" subtitle="All assignments across nonconformances" />
+      <ScreenHeader
+        title="Action Tracker"
+        subtitle="All assignments across nonconformances"
+        onBack={() => navigation.goBack()}
+      />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.summaryRow}>
           <SummaryChip label="Open" value={counts.open} color={Colors.steelBlue} />

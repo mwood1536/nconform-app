@@ -71,7 +71,7 @@ export function OptionSheet<T extends string>({
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: '#0A1628B3',
+    backgroundColor: '#1B2A4AB3',
     justifyContent: 'flex-end',
   },
   sheet: {

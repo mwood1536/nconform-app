@@ -3,14 +3,25 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import React from 'react';
 import { Platform } from 'react-native';
 import { Colors } from '../constants/colors';
-import { ActionsScreen } from '../screens/ActionsScreen';
 import { AuditsScreen } from '../screens/AuditsScreen';
 import { DashboardScreen } from '../screens/DashboardScreen';
+import { MoreScreen } from '../screens/MoreScreen';
 import { NCRListScreen } from '../screens/NCRListScreen';
-import { ReportsScreen } from '../screens/ReportsScreen';
+import { TrainingScreen } from '../screens/TrainingScreen';
 import { TabParamList } from './types';
 
 const Tab = createBottomTabNavigator<TabParamList>();
+
+const ICONS: Record<
+  keyof TabParamList,
+  [keyof typeof Ionicons.glyphMap, keyof typeof Ionicons.glyphMap]
+> = {
+  Dashboard: ['home-outline', 'home'],
+  NCRs: ['clipboard-outline', 'clipboard'],
+  Audits: ['checkbox-outline', 'checkbox'],
+  Training: ['school-outline', 'school'],
+  More: ['ellipsis-horizontal-circle-outline', 'ellipsis-horizontal-circle'],
+};
 
 export function BottomTabNavigator() {
   return (
@@ -33,23 +44,16 @@ export function BottomTabNavigator() {
           letterSpacing: 0.2,
         },
         tabBarIcon: ({ color, focused, size }) => {
-          const iconMap: Record<keyof TabParamList, [keyof typeof Ionicons.glyphMap, keyof typeof Ionicons.glyphMap]> = {
-            Dashboard: ['home-outline', 'home'],
-            NCRs: ['clipboard-outline', 'clipboard'],
-            Audits: ['shield-checkmark-outline', 'shield-checkmark'],
-            Actions: ['flash-outline', 'flash'],
-            Reports: ['document-text-outline', 'document-text'],
-          };
-          const [outline, filled] = iconMap[route.name as keyof TabParamList];
+          const [outline, filled] = ICONS[route.name as keyof TabParamList];
           return <Ionicons name={focused ? filled : outline} size={size} color={color} />;
         },
       })}
     >
-      <Tab.Screen name="Dashboard" component={DashboardScreen} />
+      <Tab.Screen name="Dashboard" component={DashboardScreen} options={{ title: 'Home' }} />
       <Tab.Screen name="NCRs" component={NCRListScreen} />
       <Tab.Screen name="Audits" component={AuditsScreen} />
-      <Tab.Screen name="Actions" component={ActionsScreen} />
-      <Tab.Screen name="Reports" component={ReportsScreen} />
+      <Tab.Screen name="Training" component={TrainingScreen} />
+      <Tab.Screen name="More" component={MoreScreen} />
     </Tab.Navigator>
   );
 }

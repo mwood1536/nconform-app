@@ -18,10 +18,12 @@ import { MetricCard } from '../components/MetricCard';
 import { NCRCard } from '../components/NCRCard';
 import { QuickActionButton } from '../components/QuickActionButton';
 import { Colors, Shadow, Spacing } from '../constants/colors';
+import { useAudits } from '../hooks/useAudits';
 import { useNCRs } from '../hooks/useNCRs';
 import { useProfile } from '../hooks/useProfile';
 import { RootStackParamList, TabParamList } from '../navigation/types';
 import { greetingFor, isOverdue } from '../utils/ncrHelpers';
+import { adsEnabled } from '../utils/subscription';
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<TabParamList, 'Dashboard'>,
@@ -31,11 +33,13 @@ type Props = CompositeScreenProps<
 export function DashboardScreen({ navigation }: Props) {
   const { profile } = useProfile();
   const { ncrs, reload } = useNCRs();
+  const { audits, reload: reloadAudits } = useAudits();
 
   useFocusEffect(
     useCallback(() => {
       void reload();
-    }, [reload]),
+      void reloadAudits();
+    }, [reload, reloadAudits]),
   );
 
   const metrics = useMemo(() => {
@@ -52,15 +56,15 @@ export function DashboardScreen({ navigation }: Props) {
     const closedThisMonth = ncrs.filter(
       (n) => n.status === 'Closed' && n.updatedAt >= monthStart,
     ).length;
-    const auditsThisMonth = 0;
+    const auditsThisMonth = audits.filter((a) => a.createdAt >= monthStart).length;
     return { open, overdueActions, closedThisMonth, auditsThisMonth };
-  }, [ncrs]);
+  }, [ncrs, audits]);
 
   const recent = ncrs.slice(0, 5);
   const greeting = greetingFor();
   const namePart = profile?.name ? `, ${profile.name}` : '';
 
-  const isFreeTier = (profile?.subscriptionTier ?? 'free') === 'free';
+  const isFreeTier = adsEnabled(profile);
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
@@ -164,7 +168,7 @@ export function DashboardScreen({ navigation }: Props) {
               label="View Reports"
               variant="ghost"
               icon="document-text-outline"
-              onPress={() => navigation.navigate('Main', { screen: 'Reports' })}
+              onPress={() => navigation.navigate('Reports')}
               fullWidth
             />
           </View>

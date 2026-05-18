@@ -1,9 +1,9 @@
 export const Colors = {
   background: '#F8F9FB',
   card: '#FFFFFF',
-  navy: '#0A1628',
-  steelBlue: '#2E5F8A',
-  amber: '#D4821A',
+  navy: '#1B2A4A',
+  steelBlue: '#4A7FA5',
+  amber: '#F59E0B',
   successGreen: '#2D6A4F',
   errorRed: '#C0392B',
   bodyText: '#1A1A2E',
@@ -12,15 +12,15 @@ export const Colors = {
 
   severityLow: '#6B7280',
   severityMedium: '#D4A017',
-  severityHigh: '#D4821A',
+  severityHigh: '#F59E0B',
   severityCritical: '#C0392B',
 
-  statusOpen: '#D4821A',
-  statusInProgress: '#2E5F8A',
+  statusOpen: '#F59E0B',
+  statusInProgress: '#4A7FA5',
   statusClosed: '#2D6A4F',
   statusOverdue: '#C0392B',
 
-  shadow: '#0A1628',
+  shadow: '#1B2A4A',
 } as const;
 
 export const Radii = {

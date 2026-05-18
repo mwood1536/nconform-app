@@ -137,6 +137,100 @@ export async function generateCorrectiveAction(
   }
 }
 
+async function callAnthropicText(
+  system: string,
+  userContent: string,
+  maxTokens: number,
+): Promise<string> {
+  const proxyUrl = getProxyUrl();
+  const directKey = getDirectKey();
+  if (!proxyUrl && !directKey) {
+    throw new Error('AI service is not configured.');
+  }
+  const endpoint = proxyUrl ?? 'https://api.anthropic.com/v1/messages';
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (!proxyUrl && directKey) {
+    headers['x-api-key'] = directKey;
+    headers['anthropic-version'] = '2023-06-01';
+  }
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      model: ANTHROPIC_MODEL,
+      max_tokens: maxTokens,
+      system,
+      messages: [{ role: 'user', content: userContent }],
+    }),
+  });
+  if (!response.ok) throw new Error('AI service error.');
+  const payload = (await response.json()) as AnthropicMessageResponse;
+  const text = payload.content?.find((b) => b.type === 'text')?.text ?? '';
+  if (!text) throw new Error('Empty AI response.');
+  return text.trim();
+}
+
+// One Pager Builder: produce an executive summary from only the blocks
+// the user selected. Falls back to a deterministic summary offline.
+export async function generateExecutiveOnePager(
+  ncr: NCR,
+  profileStandard: string,
+  blocks: string[],
+): Promise<string> {
+  const facts: string[] = [
+    `NCR: ${ncr.ncrNumber} — ${ncr.title}`,
+    `Severity: ${ncr.severity} · Status: ${ncr.status}`,
+    `Standard in use: ${profileStandard || 'Not specified'}`,
+  ];
+  const ca = ncr.correctiveAction;
+  if (blocks.includes('Problem Statement')) {
+    facts.push(`Problem: ${ca?.problemStatement || ncr.description}`);
+  }
+  if (blocks.includes('Root Cause') && ca) facts.push(`Root Cause: ${ca.rootCause}`);
+  if (blocks.includes('Corrective Action') && ca) {
+    facts.push(`Corrective Action: ${ca.correctiveAction}`);
+  }
+  if (blocks.includes('Preventive Action') && ca) {
+    facts.push(`Preventive Action: ${ca.preventiveAction}`);
+  }
+  if (blocks.includes('Standards Reference')) {
+    facts.push(`Standard Reference: ${ca?.standardReference || ncr.standardRef}`);
+  }
+  if (blocks.includes('Timeline')) {
+    facts.push(
+      `Timeline: ${ncr.timeline.map((t) => t.label).join(' → ') || 'No events recorded'}`,
+    );
+  }
+  if (blocks.includes('Actions')) {
+    facts.push(
+      `Actions: ${
+        ncr.actions.map((a) => `${a.description} (${a.status})`).join('; ') || 'None'
+      }`,
+    );
+  }
+  if (blocks.includes('Assigned Parties')) {
+    facts.push(`Assigned To: ${ncr.assignedTo || ca?.responsibleParty || 'Unassigned'}`);
+  }
+  if (blocks.includes('Photos')) {
+    facts.push(`Photo evidence on file: ${ncr.photos.length}`);
+  }
+
+  const userContent =
+    facts.join('\n') +
+    '\n\nWrite a polished executive one-page summary covering only the information above. ' +
+    'Use short paragraphs and clear headings. Audit-ready, factual, professional tone.';
+
+  try {
+    return await callAnthropicText(
+      'You write concise, audit-ready executive one-page summaries of nonconformances for quality management leadership.',
+      userContent,
+      700,
+    );
+  } catch {
+    return facts.join('\n\n');
+  }
+}
+
 export async function generateOnePagerSummary(
   ncr: NCR,
   profileStandard: string,

@@ -7,12 +7,19 @@ export type RootStackParamList = {
   NCRDetail: { ncrId: string };
   AICorrectiveAction: { ncrId: string };
   Settings: undefined;
+  Reports: undefined;
+  Actions: undefined;
+  OnePager: { ncrId?: string } | undefined;
+  AuditBuilder: { templateId?: string } | undefined;
+  AuditExecution: { auditId: string };
+  TrainingForm: { recordId?: string } | undefined;
+  UserDirectory: undefined;
 };
 
 export type TabParamList = {
   Dashboard: undefined;
   NCRs: undefined;
   Audits: undefined;
-  Actions: undefined;
-  Reports: undefined;
+  Training: undefined;
+  More: undefined;
 };
