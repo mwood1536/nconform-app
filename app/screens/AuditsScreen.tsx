@@ -5,17 +5,14 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { AdBanner } from '../components/AdBanner';
 import { MetricCard } from '../components/MetricCard';
 import { QuickActionButton } from '../components/QuickActionButton';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { Colors, Radii, Shadow, Spacing } from '../constants/colors';
 import { useAudits } from '../hooks/useAudits';
-import { useProfile } from '../hooks/useProfile';
 import { RootStackParamList, TabParamList } from '../navigation/types';
 import { Audit } from '../types';
 import { formatDate } from '../utils/ncrHelpers';
-import { adsEnabled } from '../utils/subscription';
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<TabParamList, 'Audits'>,
@@ -27,7 +24,6 @@ const STATUS_FILTERS: StatusFilter[] = ['All', 'In Progress', 'Completed'];
 type DateFilter = 'All time' | 'This month';
 
 export function AuditsScreen({ navigation }: Props) {
-  const { profile } = useProfile();
   const { audits, templates, reload, deleteTemplate } = useAudits();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('All');
   const [dateFilter, setDateFilter] = useState<DateFilter>('All time');
@@ -172,9 +168,6 @@ export function AuditsScreen({ navigation }: Props) {
           </View>
         )}
       </ScrollView>
-      {adsEnabled(profile) ? (
-        <AdBanner visible onUpgrade={() => navigation.navigate('Settings')} />
-      ) : null}
     </SafeAreaView>
   );
 }

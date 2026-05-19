@@ -5,18 +5,15 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { AdBanner } from '../components/AdBanner';
 import { QuickActionButton } from '../components/QuickActionButton';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { Colors, Radii, Shadow, Spacing } from '../constants/colors';
 import { TrainingStatus, TrainingStatuses } from '../constants/standards';
 import { useTraining } from '../hooks/useTraining';
-import { useProfile } from '../hooks/useProfile';
 import { RootStackParamList, TabParamList } from '../navigation/types';
 import { TrainingRecord } from '../types';
 import { formatDate, nowISO } from '../utils/ncrHelpers';
 import { buildTrainingHTML, generateAndSharePDF } from '../utils/reports';
-import { adsEnabled } from '../utils/subscription';
 import { effectiveTrainingStatus, trainingStatusColor } from '../utils/training';
 
 type Props = CompositeScreenProps<
@@ -29,7 +26,6 @@ const STATUS_FILTERS: StatusFilter[] = ['All', ...TrainingStatuses];
 type DateFilter = 'All time' | 'This month';
 
 export function TrainingScreen({ navigation }: Props) {
-  const { profile } = useProfile();
   const { records, reload, updateRecord } = useTraining();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('All');
   const [dateFilter, setDateFilter] = useState<DateFilter>('All time');
@@ -192,9 +188,6 @@ export function TrainingScreen({ navigation }: Props) {
           fullWidth
         />
       </ScrollView>
-      {adsEnabled(profile) ? (
-        <AdBanner visible onUpgrade={() => navigation.navigate('Settings')} />
-      ) : null}
     </SafeAreaView>
   );
 }

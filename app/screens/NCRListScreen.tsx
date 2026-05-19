@@ -12,12 +12,10 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { AdBanner } from '../components/AdBanner';
 import { NCRCard } from '../components/NCRCard';
 import { NetworkStatusIcon } from '../components/NetworkStatusIcon';
 import { Colors, Radii, Shadow, Spacing } from '../constants/colors';
 import { useNCRs } from '../hooks/useNCRs';
-import { useProfile } from '../hooks/useProfile';
 import { RootStackParamList, TabParamList } from '../navigation/types';
 import { NCR } from '../types';
 import { isOverdue, ncrSearchMatches } from '../utils/ncrHelpers';
@@ -32,7 +30,6 @@ const FILTERS: Filter[] = ['All', 'Open', 'In Progress', 'Closed', 'Overdue'];
 
 export function NCRListScreen({ navigation }: Props) {
   const { ncrs, reload, loading } = useNCRs();
-  const { profile } = useProfile();
   const [filter, setFilter] = useState<Filter>('All');
   const [query, setQuery] = useState('');
 
@@ -50,8 +47,6 @@ export function NCRListScreen({ navigation }: Props) {
       return true;
     });
   }, [ncrs, filter, query]);
-
-  const isFreeTier = (profile?.subscriptionTier ?? 'free') === 'free';
 
   const renderItem = useCallback(
     ({ item }: { item: NCR }) => (
@@ -112,8 +107,6 @@ export function NCRListScreen({ navigation }: Props) {
           );
         })}
       </View>
-
-      <AdBanner visible={isFreeTier} onUpgrade={() => navigation.navigate('Settings')} />
 
       <FlatList
         data={filtered}
