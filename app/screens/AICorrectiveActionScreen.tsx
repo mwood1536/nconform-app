@@ -155,7 +155,7 @@ export function AICorrectiveActionScreen({ navigation, route }: Props) {
 
   if (!ncr) {
     return (
-      <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+      <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
         <ScreenHeader title="Corrective Action" onBack={() => navigation.goBack()} />
         <View style={styles.emptyWrap}>
           <Ionicons name="alert-circle-outline" size={32} color={Colors.secondaryText} />
@@ -215,7 +215,7 @@ export function AICorrectiveActionScreen({ navigation, route }: Props) {
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
       <ScreenHeader
         title="AI Corrective Action Writer"
         subtitle="Generating your corrective action report"

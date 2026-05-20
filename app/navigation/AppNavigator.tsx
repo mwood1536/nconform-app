@@ -8,6 +8,7 @@ import { ActionsScreen } from '../screens/ActionsScreen';
 import { AICorrectiveActionScreen } from '../screens/AICorrectiveActionScreen';
 import { AuditBuilderScreen } from '../screens/AuditBuilderScreen';
 import { AuditExecutionScreen } from '../screens/AuditExecutionScreen';
+import { AuditScheduleScreen } from '../screens/AuditScheduleScreen';
 import { LogNCRScreen } from '../screens/LogNCRScreen';
 import { NCRDetailScreen } from '../screens/NCRDetailScreen';
 import { OnboardingScreen } from '../screens/OnboardingScreen';
@@ -16,6 +17,8 @@ import { ReportsScreen } from '../screens/ReportsScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { StandardsLibraryScreen } from '../screens/StandardsLibraryScreen';
 import { TrainingFormScreen } from '../screens/TrainingFormScreen';
+import { TrainingTemplatesScreen } from '../screens/TrainingTemplatesScreen';
+import { SafetyObservationScreen } from '../screens/SafetyObservationScreen';
 import { UserDirectoryScreen } from '../screens/UserDirectoryScreen';
 import { BottomTabNavigator } from './BottomTabNavigator';
 import { RootStackParamList } from './types';
@@ -63,9 +66,16 @@ export function AppNavigator() {
           options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
         />
         <Stack.Screen name="AuditExecution" component={AuditExecutionScreen} />
+        <Stack.Screen name="AuditSchedule" component={AuditScheduleScreen} />
         <Stack.Screen
           name="TrainingForm"
           component={TrainingFormScreen}
+          options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
+        />
+        <Stack.Screen name="TrainingTemplates" component={TrainingTemplatesScreen} />
+        <Stack.Screen
+          name="SafetyObservation"
+          component={SafetyObservationScreen}
           options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
         />
         <Stack.Screen

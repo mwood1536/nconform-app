@@ -52,7 +52,7 @@ export function NCRDetailScreen({ navigation, route }: Props) {
 
   if (!ncr) {
     return (
-      <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+      <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
         <ScreenHeader title="NCR" onBack={() => navigation.goBack()} />
         <View style={styles.missingWrap}>
           <Ionicons name="alert-circle-outline" size={32} color={Colors.secondaryText} />
@@ -112,7 +112,7 @@ export function NCRDetailScreen({ navigation, route }: Props) {
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
       <ScreenHeader
         title={ncr.ncrNumber}
         onBack={() => navigation.goBack()}

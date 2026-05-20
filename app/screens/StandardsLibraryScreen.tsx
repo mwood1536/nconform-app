@@ -14,7 +14,7 @@ export function StandardsLibraryScreen({ navigation }: Props) {
   const [expanded, setExpanded] = useState<string | null>(StandardsLibrary[0]?.code ?? null);
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
       <ScreenHeader
         title="Standards Library"
         subtitle="Reference guide"

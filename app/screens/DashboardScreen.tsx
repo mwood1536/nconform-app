@@ -169,6 +169,13 @@ export function DashboardScreen({ navigation }: Props) {
               fullWidth
             />
             <QuickActionButton
+              label="Report Safety Observation"
+              variant="amber"
+              icon="shield-outline"
+              onPress={() => navigation.navigate('SafetyObservation')}
+              fullWidth
+            />
+            <QuickActionButton
               label="View Reports"
               variant="ghost"
               icon="document-text-outline"

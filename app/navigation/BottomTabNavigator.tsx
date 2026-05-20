@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import React from 'react';
 import { Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../constants/colors';
 import { AuditsScreen } from '../screens/AuditsScreen';
 import { DashboardScreen } from '../screens/DashboardScreen';
@@ -24,6 +25,15 @@ const ICONS: Record<
 };
 
 export function BottomTabNavigator() {
+  const insets = useSafeAreaInsets();
+  // Android system nav bar height varies per device (gesture vs. 3-button).
+  // useSafeAreaInsets reports the live value so we never clip tab labels.
+  const baseHeight = Platform.OS === 'ios' ? 60 : 60;
+  const bottomPadding =
+    Platform.OS === 'ios'
+      ? Math.max(insets.bottom, 24)
+      : Math.max(insets.bottom, 12);
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -34,9 +44,9 @@ export function BottomTabNavigator() {
           backgroundColor: Colors.card,
           borderTopColor: Colors.border,
           borderTopWidth: 1,
-          height: Platform.OS === 'ios' ? 84 : 64,
+          height: baseHeight + bottomPadding,
           paddingTop: 6,
-          paddingBottom: Platform.OS === 'ios' ? 24 : 8,
+          paddingBottom: bottomPadding,
         },
         tabBarLabelStyle: {
           fontSize: 11,

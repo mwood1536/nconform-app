@@ -77,7 +77,7 @@ export function ActionsScreen({ navigation }: Props) {
   }, [allActions]);
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
       <ScreenHeader
         title="Action Tracker"
         subtitle="All assignments across nonconformances"

@@ -45,7 +45,8 @@ import {
   tierColor,
   tierLabel,
 } from '../utils/subscription';
-import { effectiveTrainingStatus } from '../utils/training';
+import { effectiveTrainingStatus, expiringBuckets } from '../utils/training';
+import { roleDescription, roleLabel, RoleOptions } from '../utils/permissions';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
 
@@ -88,7 +89,8 @@ export function SettingsScreen({ navigation }: Props) {
     const overdueTraining = records.filter(
       (r) => effectiveTrainingStatus(r) === 'Overdue',
     ).length;
-    return { openNCRs, overdueActions, auditsInProgress, overdueTraining };
+    const expiringCerts30 = expiringBuckets(records).in30;
+    return { openNCRs, overdueActions, auditsInProgress, overdueTraining, expiringCerts30 };
   }, [ncrs, audits, records]);
 
   const persistNotif = useCallback(
@@ -119,7 +121,7 @@ export function SettingsScreen({ navigation }: Props) {
 
   if (!profile) {
     return (
-      <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+      <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
         <ScreenHeader title="Settings" onBack={() => navigation.goBack()} />
         <View style={styles.emptyWrap}>
           <Text style={styles.emptyText}>Loading profile…</Text>
@@ -218,7 +220,7 @@ export function SettingsScreen({ navigation }: Props) {
   const badgeColor = tierColor(tier);
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
       <ScreenHeader title="Settings" onBack={() => navigation.goBack()} />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
@@ -474,6 +476,40 @@ export function SettingsScreen({ navigation }: Props) {
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={Colors.secondaryText} />
+          </Pressable>
+        </SectionCard>
+
+        <SectionCard title="User Roles">
+          <View style={styles.lockHeader}>
+            <View style={styles.lockIcon}>
+              <Ionicons name="lock-closed-outline" size={16} color={Colors.steelBlue} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.lockTitle}>Available with Pro Web</Text>
+              <Text style={styles.lockSub}>
+                Solo and mobile-team accounts have full access by default. Role enforcement turns on
+                when paired with a Pro Web workspace.
+              </Text>
+            </View>
+          </View>
+          {RoleOptions.map((role) => (
+            <View key={role} style={styles.roleRow}>
+              <View style={styles.roleHeader}>
+                <Text style={styles.roleName}>{roleLabel(role)}</Text>
+                <View style={styles.lockBadge}>
+                  <Ionicons name="lock-closed" size={10} color={Colors.secondaryText} />
+                  <Text style={styles.lockBadgeText}>Locked</Text>
+                </View>
+              </View>
+              <Text style={styles.roleDesc}>{roleDescription(role)}</Text>
+            </View>
+          ))}
+          <Pressable
+            onPress={() => openURL(EnterpriseURL)}
+            style={({ pressed }) => [styles.linkRow, pressed && { opacity: 0.85 }]}
+          >
+            <Text style={styles.linkLabel}>Role-based permissions available with Pro Web — Learn more</Text>
+            <Ionicons name="open-outline" size={16} color={Colors.steelBlue} />
           </Pressable>
         </SectionCard>
 
@@ -754,5 +790,68 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: Colors.secondaryText,
     letterSpacing: 0.4,
+  },
+  lockHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.sm,
+    paddingBottom: Spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+    marginBottom: Spacing.sm,
+  },
+  lockIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: Colors.steelBlue + '14',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  lockTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.navy,
+  },
+  lockSub: {
+    fontSize: 12,
+    color: Colors.secondaryText,
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  roleRow: {
+    paddingVertical: Spacing.sm,
+    gap: 4,
+  },
+  roleHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  roleName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.navy,
+  },
+  roleDesc: {
+    fontSize: 12,
+    color: Colors.secondaryText,
+    lineHeight: 16,
+  },
+  lockBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: Radii.pill,
+    backgroundColor: Colors.border,
+  },
+  lockBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: Colors.secondaryText,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
   },
 });

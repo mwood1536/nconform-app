@@ -12,9 +12,12 @@ export type RootStackParamList = {
   OnePager: { ncrId?: string } | undefined;
   AuditBuilder: { templateId?: string } | undefined;
   AuditExecution: { auditId: string };
-  TrainingForm: { recordId?: string } | undefined;
+  AuditSchedule: undefined;
+  TrainingForm: { recordId?: string; templateId?: string } | undefined;
+  TrainingTemplates: undefined;
   UserDirectory: undefined;
   StandardsLibrary: undefined;
+  SafetyObservation: undefined;
 };
 
 export type TabParamList = {

@@ -12,6 +12,7 @@ import { Colors, Radii, Shadow, Spacing } from '../constants/colors';
 import { useAudits } from '../hooks/useAudits';
 import { RootStackParamList, TabParamList } from '../navigation/types';
 import { Audit } from '../types';
+import { scheduleStatus } from '../utils/auditHelpers';
 import { formatDate } from '../utils/ncrHelpers';
 
 type Props = CompositeScreenProps<
@@ -24,7 +25,7 @@ const STATUS_FILTERS: StatusFilter[] = ['All', 'In Progress', 'Completed'];
 type DateFilter = 'All time' | 'This month';
 
 export function AuditsScreen({ navigation }: Props) {
-  const { audits, templates, reload, deleteTemplate } = useAudits();
+  const { audits, templates, scheduled, reload, deleteTemplate } = useAudits();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('All');
   const [dateFilter, setDateFilter] = useState<DateFilter>('All time');
 
@@ -39,10 +40,20 @@ export function AuditsScreen({ navigation }: Props) {
     return new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
   }, []);
 
+  const overdueScheduled = useMemo(
+    () => scheduled.filter((s) => scheduleStatus(s) === 'Overdue').length,
+    [scheduled],
+  );
+
+  const upcomingScheduled = useMemo(
+    () => scheduled.filter((s) => scheduleStatus(s) === 'Upcoming').length,
+    [scheduled],
+  );
+
   const metrics = useMemo(() => {
     const thisMonth = audits.filter((a) => a.createdAt >= monthStartISO);
     const completed = audits.filter((a) => a.status === 'Completed');
-    const completedRates = completed.map((a) => a.passRate);
+    const completedRates = completed.map((a) => a.weightedPassRate || a.passRate);
     const avgPass =
       completedRates.length === 0
         ? 0
@@ -101,6 +112,29 @@ export function AuditsScreen({ navigation }: Props) {
           fullWidth
         />
 
+        <Pressable
+          onPress={() => navigation.navigate('AuditSchedule')}
+          style={({ pressed }) => [styles.scheduleBanner, pressed && { opacity: 0.92 }]}
+        >
+          <View style={styles.scheduleIcon}>
+            <Ionicons name="calendar" size={18} color={Colors.amber} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.scheduleTitle}>Audit Schedule</Text>
+            <Text style={styles.scheduleSub}>
+              {overdueScheduled > 0
+                ? `${overdueScheduled} overdue · ${upcomingScheduled} upcoming`
+                : `${upcomingScheduled} upcoming · calendar + list`}
+            </Text>
+          </View>
+          {overdueScheduled > 0 ? (
+            <View style={styles.overdueBadge}>
+              <Text style={styles.overdueBadgeText}>{overdueScheduled}</Text>
+            </View>
+          ) : null}
+          <Ionicons name="chevron-forward" size={18} color={Colors.secondaryText} />
+        </Pressable>
+
         {templates.length > 0 ? (
           <>
             <Text style={styles.sectionLabel}>Saved Templates</Text>
@@ -117,7 +151,11 @@ export function AuditsScreen({ navigation }: Props) {
                   <View style={{ flex: 1 }}>
                     <Text style={styles.templateName}>{t.name}</Text>
                     <Text style={styles.templateMeta}>
-                      {t.layer} · {t.standard} · {t.questions.length} questions
+                      {t.layer} · {t.standard} ·{' '}
+                      {t.mode === 'random'
+                        ? `Bank (${t.questionBank.length}) → sample ${t.sampleSize}`
+                        : `${t.questions.length} questions`}
+                      {t.recurrence ? ` · ${t.recurrence.frequency}` : ''}
                     </Text>
                   </View>
                   <Pressable onPress={() => deleteTemplate(t.id)} hitSlop={10}>
@@ -179,8 +217,9 @@ interface AuditRowProps {
 
 function AuditRow({ audit, onPress }: AuditRowProps) {
   const done = audit.status === 'Completed';
+  const rate = audit.weightedPassRate || audit.passRate;
   const color = done
-    ? audit.passRate >= 80
+    ? rate >= 80
       ? Colors.successGreen
       : Colors.amber
     : Colors.steelBlue;
@@ -190,14 +229,22 @@ function AuditRow({ audit, onPress }: AuditRowProps) {
       style={({ pressed }) => [styles.auditRow, pressed && { opacity: 0.92 }]}
     >
       <View style={{ flex: 1 }}>
-        <Text style={styles.auditName}>{audit.name}</Text>
+        <View style={styles.auditNameRow}>
+          <Text style={styles.auditName}>{audit.name}</Text>
+          {audit.parentAuditId ? (
+            <View style={styles.chainTag}>
+              <Ionicons name="git-branch-outline" size={10} color={Colors.steelBlue} />
+              <Text style={styles.chainTagText}>L{audit.layerLevel}</Text>
+            </View>
+          ) : null}
+        </View>
         <Text style={styles.auditMeta}>
           {audit.layer} · {audit.standard} · {formatDate(audit.createdAt)}
         </Text>
       </View>
       <View style={[styles.auditBadge, { borderColor: color + '50', backgroundColor: color + '14' }]}>
         <Text style={[styles.auditBadgeText, { color }]}>
-          {done ? `${audit.passRate}%` : 'In Progress'}
+          {done ? `${rate}%` : 'In Progress'}
         </Text>
       </View>
       <Ionicons name="chevron-forward" size={18} color={Colors.secondaryText} />
@@ -243,6 +290,46 @@ const styles = StyleSheet.create({
     color: Colors.secondaryText,
     textTransform: 'uppercase',
     marginTop: Spacing.md,
+  },
+  scheduleBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: Radii.card,
+    padding: Spacing.md,
+    ...Shadow.card,
+  },
+  scheduleIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: Colors.amber + '14',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  scheduleTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.navy,
+  },
+  scheduleSub: {
+    fontSize: 12,
+    color: Colors.secondaryText,
+    marginTop: 2,
+  },
+  overdueBadge: {
+    backgroundColor: Colors.errorRed,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: Radii.pill,
+  },
+  overdueBadgeText: {
+    color: Colors.card,
+    fontSize: 11,
+    fontWeight: '700',
   },
   templateRow: {
     flexDirection: 'row',
@@ -329,10 +416,29 @@ const styles = StyleSheet.create({
     padding: Spacing.md,
     ...Shadow.card,
   },
+  auditNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   auditName: {
     fontSize: 14,
     fontWeight: '700',
     color: Colors.navy,
+  },
+  chainTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: Radii.pill,
+    backgroundColor: Colors.steelBlue + '14',
+  },
+  chainTagText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: Colors.steelBlue,
   },
   auditMeta: {
     fontSize: 12,

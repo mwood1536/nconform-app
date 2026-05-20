@@ -62,6 +62,7 @@ export function OnboardingScreen({ navigation }: Props) {
         name: '',
         company: '',
         role: '',
+        permissionRole: 'admin',
         industry: draft.industry,
         standard: draft.standard,
         teamSize: draft.teamSize,

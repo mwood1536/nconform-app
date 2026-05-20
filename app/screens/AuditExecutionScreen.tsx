@@ -23,8 +23,17 @@ import { AuditResponseType, AuditResponseTypes, StandardReference } from '../con
 import { useAudits } from '../hooks/useAudits';
 import { useNCRs } from '../hooks/useNCRs';
 import { RootStackParamList } from '../navigation/types';
-import { AuditResponse } from '../types';
-import { nowISO } from '../utils/ncrHelpers';
+import { Audit, AuditResponse } from '../types';
+import {
+  computePassRates,
+  emptyResponse,
+  escalationHoursFor,
+  followUpsSatisfied,
+  layerLevelOf,
+  nextLayerLabel,
+} from '../utils/auditHelpers';
+import { generateId, nowISO } from '../utils/ncrHelpers';
+import { scheduleAuditReminder } from '../utils/notifications';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AuditExecution'>;
 
@@ -41,16 +50,9 @@ function standardRefFor(standard: string): StandardReference {
   return 'N/A';
 }
 
-function computePassRate(responses: AuditResponse[]): number {
-  const scored = responses.filter((r) => r.result === 'Pass' || r.result === 'Fail');
-  if (scored.length === 0) return 0;
-  const passed = scored.filter((r) => r.result === 'Pass').length;
-  return Math.round((passed / scored.length) * 100);
-}
-
 export function AuditExecutionScreen({ navigation, route }: Props) {
   const { auditId } = route.params;
-  const { audits, reload, updateAudit } = useAudits();
+  const { audits, reload, updateAudit, createAudit, saveSchedule } = useAudits();
   const { createNCR } = useNCRs();
 
   useFocusEffect(
@@ -64,7 +66,7 @@ export function AuditExecutionScreen({ navigation, route }: Props) {
   const [completed, setCompleted] = useState(false);
   const [generating, setGenerating] = useState(false);
 
-  const working = responses ?? audit?.responses ?? [];
+  const working: AuditResponse[] = responses ?? audit?.responses ?? [];
 
   const answered = working.filter((r) => r.result !== null).length;
   const total = audit?.questions.length ?? 0;
@@ -73,7 +75,7 @@ export function AuditExecutionScreen({ navigation, route }: Props) {
 
   if (!audit) {
     return (
-      <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+      <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
         <ScreenHeader title="Audit" onBack={() => navigation.goBack()} />
         <View style={styles.missing}>
           <Ionicons name="alert-circle-outline" size={32} color={Colors.secondaryText} />
@@ -85,9 +87,18 @@ export function AuditExecutionScreen({ navigation, route }: Props) {
 
   const mutate = (next: AuditResponse[]) => setResponses(next);
 
+  const ensureResponseList = (): AuditResponse[] => {
+    if (responses) return responses;
+    // Hydrate missing entries (older audits saved before follow-up fields existed).
+    return audit.questions.map(
+      (q) => audit.responses.find((r) => r.questionId === q.id) ?? emptyResponse(q.id),
+    );
+  };
+
   const setResult = (questionId: string, result: AuditResponseType) => {
+    const base = ensureResponseList();
     mutate(
-      working.map((r) =>
+      base.map((r) =>
         r.questionId === questionId
           ? { ...r, result: r.result === result ? null : result }
           : r,
@@ -96,10 +107,18 @@ export function AuditExecutionScreen({ navigation, route }: Props) {
   };
 
   const setNote = (questionId: string, note: string) => {
-    mutate(working.map((r) => (r.questionId === questionId ? { ...r, note } : r)));
+    const base = ensureResponseList();
+    mutate(base.map((r) => (r.questionId === questionId ? { ...r, note } : r)));
   };
 
-  const capturePhoto = async (questionId: string) => {
+  const setFollowUpAnswer = (questionId: string, value: string) => {
+    const base = ensureResponseList();
+    mutate(
+      base.map((r) => (r.questionId === questionId ? { ...r, followUpAnswer: value } : r)),
+    );
+  };
+
+  const capturePhoto = async (questionId: string, target: 'primary' | 'followUp') => {
     const perm = await ImagePicker.requestCameraPermissionsAsync();
     if (!perm.granted) {
       Alert.alert('Camera unavailable', 'Allow camera access to capture audit evidence.');
@@ -111,10 +130,72 @@ export function AuditExecutionScreen({ navigation, route }: Props) {
     });
     if (result.canceled) return;
     const uri = result.assets[0]?.uri ?? null;
-    mutate(working.map((r) => (r.questionId === questionId ? { ...r, photo: uri } : r)));
+    const base = ensureResponseList();
+    mutate(
+      base.map((r) =>
+        r.questionId === questionId
+          ? target === 'primary'
+            ? { ...r, photo: uri }
+            : { ...r, followUpPhoto: uri }
+          : r,
+      ),
+    );
+  };
+
+  const triggerEscalation = async (parent: Audit): Promise<Audit | null> => {
+    const nextLayer = nextLayerLabel(parent.layer);
+    if (!nextLayer) return null;
+    const level = layerLevelOf(nextLayer);
+    const hours = escalationHoursFor(level);
+    const due = new Date(Date.now() + hours * 3600_000);
+
+    const escalatedQuestions = parent.questions.map((q) => ({
+      ...q,
+      id: generateId('q'),
+    }));
+    const escalated: Audit = {
+      id: generateId('aud'),
+      templateId: parent.templateId,
+      name: `Escalation: ${parent.name}`,
+      layer: nextLayer,
+      standard: parent.standard,
+      questions: escalatedQuestions,
+      responses: escalatedQuestions.map((q) => emptyResponse(q.id)),
+      passRate: 0,
+      weightedPassRate: 0,
+      randomizationSeed: null,
+      parentAuditId: parent.id,
+      layerLevel: level,
+      status: 'Scheduled',
+      assignedTo: parent.assignedTo,
+      createdAt: nowISO(),
+      completedAt: null,
+    };
+    await createAudit(escalated);
+
+    const notificationId = await scheduleAuditReminder({
+      title: `${nextLayer} escalation triggered`,
+      body: `${parent.name} failed — Layer ${level} audit due within ${hours}h.`,
+      date: new Date(Date.now() + 30_000),
+    });
+    await saveSchedule({
+      id: generateId('sch'),
+      templateId: parent.templateId,
+      name: escalated.name,
+      layer: escalated.layer,
+      standard: escalated.standard,
+      assignedTo: escalated.assignedTo,
+      dueDate: due.toISOString(),
+      status: 'Upcoming',
+      escalationParentAuditId: parent.id,
+      notificationId,
+      createdAt: nowISO(),
+    });
+    return escalated;
   };
 
   const onComplete = async () => {
+    const base = ensureResponseList();
     if (answered < total) {
       Alert.alert(
         'Audit incomplete',
@@ -122,13 +203,35 @@ export function AuditExecutionScreen({ navigation, route }: Props) {
       );
       return;
     }
-    const rate = computePassRate(working);
-    await updateAudit(audit.id, {
-      responses: working,
-      passRate: rate,
+    const followUpCheck = followUpsSatisfied(audit.questions, base);
+    if (!followUpCheck.ok) {
+      Alert.alert(
+        'Follow-up required',
+        `Complete the follow-up note or photo on:\n• ${followUpCheck.missingPrompts.join('\n• ')}`,
+      );
+      return;
+    }
+    const rates = computePassRates(audit.questions, base);
+    const updated = await updateAudit(audit.id, {
+      responses: base,
+      passRate: rates.pass,
+      weightedPassRate: rates.weighted,
       status: 'Completed',
       completedAt: nowISO(),
     });
+
+    if (updated && updated.layerLevel < 3 && base.some((r) => r.result === 'Fail')) {
+      const escalated = await triggerEscalation(updated);
+      if (escalated) {
+        Alert.alert(
+          'Escalation triggered',
+          `A ${escalated.layer} audit has been scheduled within ${escalationHoursFor(
+            escalated.layerLevel,
+          )} hours because of failed items.`,
+        );
+      }
+    }
+
     setCompleted(true);
   };
 
@@ -139,16 +242,23 @@ export function AuditExecutionScreen({ navigation, route }: Props) {
       for (const r of failedResponses) {
         const q = audit.questions.find((x) => x.id === r.questionId);
         if (!q) continue;
+        const photos = [
+          ...(r.photo ? [{ uri: r.photo, capturedAt: nowISO() }] : []),
+          ...(r.followUpPhoto ? [{ uri: r.followUpPhoto, capturedAt: nowISO() }] : []),
+        ];
         await createNCR({
           title: `LPA Finding — ${q.prompt.slice(0, 60)}`,
           detectionPoint: 'Internal Audit',
-          severity: 'Medium',
+          severity: q.weight >= 4 ? 'High' : 'Medium',
           standardRef: standardRefFor(audit.standard),
           description:
             `Failed item from audit "${audit.name}" (${audit.layer}, ${audit.standard}).\n\n` +
             `Question: ${q.prompt}\n` +
-            (r.note ? `Auditor note: ${r.note}` : 'No auditor note recorded.'),
-          photos: r.photo ? [{ uri: r.photo, capturedAt: nowISO() }] : [],
+            (r.note ? `Auditor note: ${r.note}\n` : '') +
+            (q.followUpOnFail && r.followUpAnswer
+              ? `Follow-up (${q.followUpOnFail.prompt}): ${r.followUpAnswer}`
+              : ''),
+          photos,
           containmentAction: '',
           assignedTo: audit.assignedTo,
           dueDate: '',
@@ -169,9 +279,9 @@ export function AuditExecutionScreen({ navigation, route }: Props) {
   };
 
   if (completed) {
-    const rate = computePassRate(working);
+    const rates = computePassRates(audit.questions, working);
     return (
-      <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+      <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
         <ScreenHeader
           title="Audit Complete"
           subtitle={audit.name}
@@ -179,21 +289,31 @@ export function AuditExecutionScreen({ navigation, route }: Props) {
         />
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <View style={styles.scoreCard}>
-            <Text style={styles.scoreEyebrow}>PASS RATE</Text>
+            <Text style={styles.scoreEyebrow}>WEIGHTED PASS RATE</Text>
             <Text
               style={[
                 styles.scoreValue,
-                { color: rate >= 80 ? Colors.successGreen : Colors.errorRed },
+                { color: rates.weighted >= 80 ? Colors.successGreen : Colors.errorRed },
               ]}
             >
-              {rate}%
+              {rates.weighted}%
             </Text>
             <Text style={styles.scoreMeta}>
-              {working.filter((r) => r.result === 'Pass').length} passed ·{' '}
-              {failedResponses.length} failed ·{' '}
+              Unweighted {rates.pass}% ·{' '}
+              {working.filter((r) => r.result === 'Pass').length} pass ·{' '}
+              {failedResponses.length} fail ·{' '}
               {working.filter((r) => r.result === 'N/A').length} N/A
             </Text>
           </View>
+
+          {audit.parentAuditId ? (
+            <View style={styles.chainCard}>
+              <Ionicons name="git-branch-outline" size={16} color={Colors.steelBlue} />
+              <Text style={styles.chainText}>
+                Escalated from a prior audit. Chain visible in Audit History.
+              </Text>
+            </View>
+          ) : null}
 
           <Text style={styles.sectionLabel}>Failed Items ({failedResponses.length})</Text>
           {failedResponses.length === 0 ? (
@@ -211,6 +331,9 @@ export function AuditExecutionScreen({ navigation, route }: Props) {
                     <View style={{ flex: 1 }}>
                       <Text style={styles.failText}>{q?.prompt}</Text>
                       {r.note ? <Text style={styles.failNote}>{r.note}</Text> : null}
+                      {q?.followUpOnFail && r.followUpAnswer ? (
+                        <Text style={styles.failNote}>Follow-up: {r.followUpAnswer}</Text>
+                      ) : null}
                     </View>
                   </View>
                 );
@@ -241,7 +364,7 @@ export function AuditExecutionScreen({ navigation, route }: Props) {
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
       <ScreenHeader title={audit.name} subtitle={audit.layer} onBack={() => navigation.goBack()} />
       <View style={styles.progressWrap}>
         <View style={styles.progressTrack}>
@@ -255,86 +378,136 @@ export function AuditExecutionScreen({ navigation, route }: Props) {
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-      <ScrollView
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        {audit.questions.map((q, idx) => {
-          const r = working.find((x) => x.questionId === q.id);
-          return (
-            <View key={q.id} style={styles.qCard}>
-              <Text style={styles.qNumber}>QUESTION {idx + 1}</Text>
-              <Text style={styles.qPrompt}>{q.prompt}</Text>
-              <View style={styles.resultRow}>
-                {AuditResponseTypes.map((rt) => {
-                  const active = r?.result === rt;
-                  const color = RESULT_COLOR[rt];
-                  return (
-                    <Pressable
-                      key={rt}
-                      onPress={() => setResult(q.id, rt)}
-                      style={({ pressed }) => [
-                        styles.resultBtn,
-                        {
-                          backgroundColor: active ? color : Colors.card,
-                          borderColor: active ? color : Colors.border,
-                        },
-                        pressed && { opacity: 0.85 },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.resultLabel,
-                          { color: active ? Colors.card : color },
+        <ScrollView
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {audit.questions.map((q, idx) => {
+            const r = working.find((x) => x.questionId === q.id) ?? emptyResponse(q.id);
+            const showFollowUp = r.result === 'Fail' && q.followUpOnFail !== null;
+            return (
+              <View key={q.id} style={styles.qCard}>
+                <View style={styles.qHeaderRow}>
+                  <Text style={styles.qNumber}>QUESTION {idx + 1}</Text>
+                  {q.weight > 1 ? (
+                    <View style={styles.weightChip}>
+                      <Ionicons name="barbell-outline" size={11} color={Colors.amber} />
+                      <Text style={styles.weightChipText}>×{q.weight} weight</Text>
+                    </View>
+                  ) : null}
+                </View>
+                <Text style={styles.qPrompt}>{q.prompt}</Text>
+                <View style={styles.resultRow}>
+                  {AuditResponseTypes.map((rt) => {
+                    const active = r.result === rt;
+                    const color = RESULT_COLOR[rt];
+                    return (
+                      <Pressable
+                        key={rt}
+                        onPress={() => setResult(q.id, rt)}
+                        style={({ pressed }) => [
+                          styles.resultBtn,
+                          {
+                            backgroundColor: active ? color : Colors.card,
+                            borderColor: active ? color : Colors.border,
+                          },
+                          pressed && { opacity: 0.85 },
                         ]}
                       >
-                        {rt}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-
-              {q.requiresPhoto || r?.photo ? (
-                <View style={styles.photoBlock}>
-                  {r?.photo ? (
-                    <Image source={{ uri: r.photo }} style={styles.photo} />
-                  ) : (
-                    <Text style={styles.photoRequired}>Photo evidence required</Text>
-                  )}
-                  <Pressable
-                    onPress={() => capturePhoto(q.id)}
-                    style={({ pressed }) => [styles.photoBtn, pressed && { opacity: 0.85 }]}
-                  >
-                    <Ionicons name="camera-outline" size={16} color={Colors.steelBlue} />
-                    <Text style={styles.photoBtnLabel}>
-                      {r?.photo ? 'Retake' : 'Capture'}
-                    </Text>
-                  </Pressable>
+                        <Text
+                          style={[
+                            styles.resultLabel,
+                            { color: active ? Colors.card : color },
+                          ]}
+                        >
+                          {rt}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
                 </View>
-              ) : null}
 
-              <TextInput
-                style={styles.note}
-                value={r?.note ?? ''}
-                onChangeText={(t) => setNote(q.id, t)}
-                placeholder="Optional note…"
-                placeholderTextColor={Colors.secondaryText}
-                multiline
-              />
-            </View>
-          );
-        })}
+                {q.requiresPhoto || r.photo ? (
+                  <View style={styles.photoBlock}>
+                    {r.photo ? (
+                      <Image source={{ uri: r.photo }} style={styles.photo} />
+                    ) : (
+                      <Text style={styles.photoRequired}>Photo evidence required</Text>
+                    )}
+                    <Pressable
+                      onPress={() => capturePhoto(q.id, 'primary')}
+                      style={({ pressed }) => [styles.photoBtn, pressed && { opacity: 0.85 }]}
+                    >
+                      <Ionicons name="camera-outline" size={16} color={Colors.steelBlue} />
+                      <Text style={styles.photoBtnLabel}>{r.photo ? 'Retake' : 'Capture'}</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
 
-        <QuickActionButton
-          label="Complete Audit"
-          variant="primary"
-          icon="checkmark-circle-outline"
-          onPress={onComplete}
-          fullWidth
-        />
-      </ScrollView>
+                <TextInput
+                  style={styles.note}
+                  value={r.note}
+                  onChangeText={(t) => setNote(q.id, t)}
+                  placeholder="Optional note…"
+                  placeholderTextColor={Colors.secondaryText}
+                  multiline
+                />
+
+                {showFollowUp && q.followUpOnFail ? (
+                  <View style={styles.followUpBlock}>
+                    <View style={styles.followUpHeader}>
+                      <Ionicons name="git-branch-outline" size={14} color={Colors.navy} />
+                      <Text style={styles.followUpTitle}>Follow-up required</Text>
+                    </View>
+                    <Text style={styles.followUpPrompt}>{q.followUpOnFail.prompt}</Text>
+                    <TextInput
+                      style={[
+                        styles.note,
+                        q.followUpOnFail.requireNote && !r.followUpAnswer.trim() && styles.requiredField,
+                      ]}
+                      value={r.followUpAnswer}
+                      onChangeText={(t) => setFollowUpAnswer(q.id, t)}
+                      placeholder={
+                        q.followUpOnFail.requireNote
+                          ? 'Required response…'
+                          : 'Follow-up response…'
+                      }
+                      placeholderTextColor={Colors.secondaryText}
+                      multiline
+                    />
+                    {q.followUpOnFail.requirePhoto ? (
+                      <View style={styles.photoBlock}>
+                        {r.followUpPhoto ? (
+                          <Image source={{ uri: r.followUpPhoto }} style={styles.photo} />
+                        ) : (
+                          <Text style={styles.photoRequired}>Follow-up photo required</Text>
+                        )}
+                        <Pressable
+                          onPress={() => capturePhoto(q.id, 'followUp')}
+                          style={({ pressed }) => [styles.photoBtn, pressed && { opacity: 0.85 }]}
+                        >
+                          <Ionicons name="camera-outline" size={16} color={Colors.steelBlue} />
+                          <Text style={styles.photoBtnLabel}>
+                            {r.followUpPhoto ? 'Retake' : 'Capture'}
+                          </Text>
+                        </Pressable>
+                      </View>
+                    ) : null}
+                  </View>
+                ) : null}
+              </View>
+            );
+          })}
+
+          <QuickActionButton
+            label="Complete Audit"
+            variant="primary"
+            icon="checkmark-circle-outline"
+            onPress={onComplete}
+            fullWidth
+          />
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -390,11 +563,30 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
     ...Shadow.card,
   },
+  qHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   qNumber: {
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 0.6,
     color: Colors.secondaryText,
+  },
+  weightChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: Radii.pill,
+    backgroundColor: Colors.amber + '18',
+  },
+  weightChipText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: Colors.amber,
   },
   qPrompt: {
     fontSize: 15,
@@ -464,6 +656,35 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
     marginTop: Spacing.xs,
   },
+  requiredField: {
+    borderColor: Colors.amber,
+  },
+  followUpBlock: {
+    marginTop: Spacing.sm,
+    padding: Spacing.md,
+    borderRadius: Radii.button,
+    backgroundColor: Colors.navy + '08',
+    gap: Spacing.xs,
+  },
+  followUpHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  followUpTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.navy,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  followUpPrompt: {
+    fontSize: 14,
+    color: Colors.bodyText,
+    fontWeight: '600',
+    lineHeight: 19,
+    marginTop: 2,
+  },
   scoreCard: {
     backgroundColor: Colors.navy,
     borderRadius: Radii.card,
@@ -487,6 +708,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.card + 'C0',
     fontWeight: '600',
+    textAlign: 'center',
+  },
+  chainCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    backgroundColor: Colors.steelBlue + '10',
+    borderRadius: Radii.button,
+    padding: Spacing.md,
+  },
+  chainText: {
+    flex: 1,
+    fontSize: 12,
+    color: Colors.steelBlue,
+    fontWeight: '600',
+    lineHeight: 17,
   },
   sectionLabel: {
     fontSize: 11,

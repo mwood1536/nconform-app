@@ -127,7 +127,7 @@ export function OnePagerScreen({ navigation, route }: Props) {
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
       <ScreenHeader
         title="One Pager Builder"
         subtitle="Executive summary for leadership"

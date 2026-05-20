@@ -50,6 +50,7 @@ export function UserDirectoryScreen({ navigation }: Props) {
       name: name.trim(),
       role: role.trim(),
       email: email.trim(),
+      permissionRole: 'standard',
     });
     resetForm();
     setAdding(false);
@@ -64,7 +65,7 @@ export function UserDirectoryScreen({ navigation }: Props) {
 
   if (!isBundle(profile)) {
     return (
-      <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+      <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
         <ScreenHeader title="User Directory" onBack={() => navigation.goBack()} />
         <FeatureLock
           tier="bundle"
@@ -82,7 +83,7 @@ export function UserDirectoryScreen({ navigation }: Props) {
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
       <ScreenHeader
         title="User Directory"
         subtitle="Shared team members"

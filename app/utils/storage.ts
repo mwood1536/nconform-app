@@ -2,13 +2,20 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   Action,
   Audit,
+  AuditQuestion,
+  AuditResponse,
   AuditTemplate,
   CorrectiveAction,
   NCR,
+  SafetyObservation,
+  ScheduledAudit,
+  ScheduledTraining,
   SubscriptionTier,
   TeamMember,
   TrainingRecord,
+  TrainingTemplate,
   UserProfile,
+  UserRole,
 } from '../types';
 
 export const StorageKeys = {
@@ -19,9 +26,13 @@ export const StorageKeys = {
   ncrCounter: 'ncrCounter',
   audits: 'audits',
   auditTemplates: 'auditTemplates',
+  scheduledAudits: 'scheduledAudits',
   trainingRecords: 'trainingRecords',
+  trainingTemplates: 'trainingTemplates',
+  scheduledTraining: 'scheduledTraining',
   teamDirectory: 'teamDirectory',
   notificationPrefs: 'notificationPrefs',
+  safetyObservations: 'safetyObservations',
 } as const;
 
 export interface NotificationPrefs {
@@ -31,6 +42,7 @@ export interface NotificationPrefs {
   overdueActionAlerts: boolean;
   auditDueAlerts: boolean;
   trainingOverdueAlerts: boolean;
+  certificationExpiryAlerts: boolean;
 }
 
 export const DefaultNotificationPrefs: NotificationPrefs = {
@@ -40,6 +52,7 @@ export const DefaultNotificationPrefs: NotificationPrefs = {
   overdueActionAlerts: true,
   auditDueAlerts: true,
   trainingOverdueAlerts: true,
+  certificationExpiryAlerts: true,
 };
 
 async function readJSON<T>(key: string, fallback: T): Promise<T> {
@@ -54,6 +67,12 @@ async function readJSON<T>(key: string, fallback: T): Promise<T> {
 
 async function writeJSON<T>(key: string, value: T): Promise<void> {
   await AsyncStorage.setItem(key, JSON.stringify(value));
+}
+
+function normalizeRole(value: unknown): UserRole {
+  return value === 'standard' || value === 'viewer' || value === 'admin'
+    ? value
+    : 'admin';
 }
 
 // Normalize legacy profiles: the retired "team" tier maps to "bundle",
@@ -71,6 +90,7 @@ function normalizeProfile(raw: UserProfile | null): UserProfile | null {
     ...raw,
     subscriptionTier,
     rcaConnected: raw.rcaConnected ?? false,
+    permissionRole: normalizeRole((raw as Partial<UserProfile>).permissionRole),
   };
 }
 
@@ -81,6 +101,83 @@ function normalizeNCR(raw: NCR): NCR {
     sharedWithRCA: raw.sharedWithRCA ?? false,
     standardClauses: raw.standardClauses ?? [],
   };
+}
+
+function normalizeQuestion(raw: Partial<AuditQuestion> & { id: string; prompt: string }): AuditQuestion {
+  return {
+    id: raw.id,
+    prompt: raw.prompt,
+    requiresPhoto: raw.requiresPhoto ?? false,
+    weight: typeof raw.weight === 'number' && raw.weight >= 1 ? raw.weight : 1,
+    followUpOnFail: raw.followUpOnFail ?? null,
+  };
+}
+
+function normalizeResponse(
+  raw: Partial<AuditResponse> & { questionId: string },
+): AuditResponse {
+  return {
+    questionId: raw.questionId,
+    result: raw.result ?? null,
+    note: raw.note ?? '',
+    photo: raw.photo ?? null,
+    followUpAnswer: raw.followUpAnswer ?? '',
+    followUpPhoto: raw.followUpPhoto ?? null,
+  };
+}
+
+function normalizeAudit(raw: Audit): Audit {
+  return {
+    ...raw,
+    questions: (raw.questions ?? []).map(normalizeQuestion),
+    responses: (raw.responses ?? []).map(normalizeResponse),
+    weightedPassRate: typeof raw.weightedPassRate === 'number' ? raw.weightedPassRate : raw.passRate ?? 0,
+    randomizationSeed: raw.randomizationSeed ?? null,
+    parentAuditId: raw.parentAuditId ?? null,
+    layerLevel: typeof raw.layerLevel === 'number' ? raw.layerLevel : layerLevelFromLabel(raw.layer),
+  };
+}
+
+function normalizeTemplate(raw: AuditTemplate): AuditTemplate {
+  const questions = (raw.questions ?? []).map(normalizeQuestion);
+  return {
+    ...raw,
+    mode: raw.mode ?? 'fixed',
+    questions,
+    questionBank: (raw.questionBank ?? []).map(normalizeQuestion),
+    sampleSize: typeof raw.sampleSize === 'number' && raw.sampleSize > 0 ? raw.sampleSize : 10,
+    recurrence: raw.recurrence ?? null,
+  };
+}
+
+function normalizeTeamMember(raw: TeamMember): TeamMember {
+  return {
+    ...raw,
+    permissionRole: normalizeStandardRole(raw.permissionRole),
+  };
+}
+
+function normalizeStandardRole(value: unknown): UserRole {
+  return value === 'admin' || value === 'standard' || value === 'viewer'
+    ? value
+    : 'standard';
+}
+
+function normalizeTrainingRecord(raw: TrainingRecord): TrainingRecord {
+  return {
+    ...raw,
+    materials: raw.materials ?? [],
+    certificationExpiresOn: raw.certificationExpiresOn ?? null,
+    recurrence: raw.recurrence ?? null,
+    parentRecordId: raw.parentRecordId ?? null,
+    templateId: raw.templateId ?? null,
+  };
+}
+
+function layerLevelFromLabel(layer: string): number {
+  if (layer.includes('Layer 3') || layer.toLowerCase().includes('manager')) return 3;
+  if (layer.includes('Layer 2') || layer.toLowerCase().includes('supervisor')) return 2;
+  return 1;
 }
 
 export const Storage = {
@@ -117,31 +214,63 @@ export const Storage = {
   },
 
   async getAudits(): Promise<Audit[]> {
-    return readJSON<Audit[]>(StorageKeys.audits, []);
+    const audits = await readJSON<Audit[]>(StorageKeys.audits, []);
+    return audits.map(normalizeAudit);
   },
   async setAudits(audits: Audit[]): Promise<void> {
     await writeJSON(StorageKeys.audits, audits);
   },
 
   async getAuditTemplates(): Promise<AuditTemplate[]> {
-    return readJSON<AuditTemplate[]>(StorageKeys.auditTemplates, []);
+    const templates = await readJSON<AuditTemplate[]>(StorageKeys.auditTemplates, []);
+    return templates.map(normalizeTemplate);
   },
   async setAuditTemplates(templates: AuditTemplate[]): Promise<void> {
     await writeJSON(StorageKeys.auditTemplates, templates);
   },
 
+  async getScheduledAudits(): Promise<ScheduledAudit[]> {
+    return readJSON<ScheduledAudit[]>(StorageKeys.scheduledAudits, []);
+  },
+  async setScheduledAudits(items: ScheduledAudit[]): Promise<void> {
+    await writeJSON(StorageKeys.scheduledAudits, items);
+  },
+
   async getTrainingRecords(): Promise<TrainingRecord[]> {
-    return readJSON<TrainingRecord[]>(StorageKeys.trainingRecords, []);
+    const records = await readJSON<TrainingRecord[]>(StorageKeys.trainingRecords, []);
+    return records.map(normalizeTrainingRecord);
   },
   async setTrainingRecords(records: TrainingRecord[]): Promise<void> {
     await writeJSON(StorageKeys.trainingRecords, records);
   },
 
+  async getTrainingTemplates(): Promise<TrainingTemplate[]> {
+    return readJSON<TrainingTemplate[]>(StorageKeys.trainingTemplates, []);
+  },
+  async setTrainingTemplates(templates: TrainingTemplate[]): Promise<void> {
+    await writeJSON(StorageKeys.trainingTemplates, templates);
+  },
+
+  async getScheduledTraining(): Promise<ScheduledTraining[]> {
+    return readJSON<ScheduledTraining[]>(StorageKeys.scheduledTraining, []);
+  },
+  async setScheduledTraining(items: ScheduledTraining[]): Promise<void> {
+    await writeJSON(StorageKeys.scheduledTraining, items);
+  },
+
   async getTeamDirectory(): Promise<TeamMember[]> {
-    return readJSON<TeamMember[]>(StorageKeys.teamDirectory, []);
+    const members = await readJSON<TeamMember[]>(StorageKeys.teamDirectory, []);
+    return members.map(normalizeTeamMember);
   },
   async setTeamDirectory(members: TeamMember[]): Promise<void> {
     await writeJSON(StorageKeys.teamDirectory, members);
+  },
+
+  async getSafetyObservations(): Promise<SafetyObservation[]> {
+    return readJSON<SafetyObservation[]>(StorageKeys.safetyObservations, []);
+  },
+  async setSafetyObservations(items: SafetyObservation[]): Promise<void> {
+    await writeJSON(StorageKeys.safetyObservations, items);
   },
 
   async getNotificationPrefs(): Promise<NotificationPrefs> {
@@ -171,9 +300,13 @@ export const Storage = {
       StorageKeys.ncrCounter,
       StorageKeys.audits,
       StorageKeys.auditTemplates,
+      StorageKeys.scheduledAudits,
       StorageKeys.trainingRecords,
+      StorageKeys.trainingTemplates,
+      StorageKeys.scheduledTraining,
       StorageKeys.teamDirectory,
       StorageKeys.notificationPrefs,
+      StorageKeys.safetyObservations,
     ]);
   },
 };
