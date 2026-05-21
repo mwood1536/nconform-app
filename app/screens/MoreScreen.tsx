@@ -32,6 +32,18 @@ const ROWS: RowDef[] = [
     route: 'Reports',
   },
   {
+    icon: 'analytics-outline',
+    title: 'Pareto Analysis',
+    subtitle: 'Top recurring root causes',
+    route: 'Pareto',
+  },
+  {
+    icon: 'business-outline',
+    title: 'By Department',
+    subtitle: 'NCR breakdown per area',
+    route: 'DepartmentBreakdown',
+  },
+  {
     icon: 'flash-outline',
     title: 'Action Tracker',
     subtitle: 'Every assignment across nonconformances',
@@ -44,10 +56,22 @@ const ROWS: RowDef[] = [
     route: 'OnePager',
   },
   {
+    icon: 'search-outline',
+    title: 'Search',
+    subtitle: 'Find NCRs, audits, training, observations',
+    route: 'Search',
+  },
+  {
     icon: 'people-outline',
     title: 'User Directory',
     subtitle: 'Shared team members for assignment',
     route: 'UserDirectory',
+  },
+  {
+    icon: 'help-circle-outline',
+    title: 'Help & FAQ',
+    subtitle: 'How NConform works, by topic',
+    route: 'HelpFAQ',
   },
   {
     icon: 'settings-outline',

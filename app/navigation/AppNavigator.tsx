@@ -19,6 +19,13 @@ import { StandardsLibraryScreen } from '../screens/StandardsLibraryScreen';
 import { TrainingFormScreen } from '../screens/TrainingFormScreen';
 import { TrainingTemplatesScreen } from '../screens/TrainingTemplatesScreen';
 import { SafetyObservationScreen } from '../screens/SafetyObservationScreen';
+import { SearchScreen } from '../screens/SearchScreen';
+import { ParetoAnalysisScreen } from '../screens/ParetoAnalysisScreen';
+import { DepartmentBreakdownScreen } from '../screens/DepartmentBreakdownScreen';
+import { ManageDepartmentsScreen } from '../screens/ManageDepartmentsScreen';
+import { QuestionBankLibraryScreen } from '../screens/QuestionBankLibraryScreen';
+import { HelpFAQScreen } from '../screens/HelpFAQScreen';
+import { QuizScreen } from '../screens/QuizScreen';
 import { UserDirectoryScreen } from '../screens/UserDirectoryScreen';
 import { BottomTabNavigator } from './BottomTabNavigator';
 import { RootStackParamList } from './types';
@@ -76,6 +83,21 @@ export function AppNavigator() {
         <Stack.Screen
           name="SafetyObservation"
           component={SafetyObservationScreen}
+          options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
+        />
+        <Stack.Screen
+          name="Search"
+          component={SearchScreen}
+          options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
+        />
+        <Stack.Screen name="Pareto" component={ParetoAnalysisScreen} />
+        <Stack.Screen name="DepartmentBreakdown" component={DepartmentBreakdownScreen} />
+        <Stack.Screen name="ManageDepartments" component={ManageDepartmentsScreen} />
+        <Stack.Screen name="QuestionBank" component={QuestionBankLibraryScreen} />
+        <Stack.Screen name="HelpFAQ" component={HelpFAQScreen} />
+        <Stack.Screen
+          name="Quiz"
+          component={QuizScreen}
           options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
         />
         <Stack.Screen

@@ -100,6 +100,7 @@ export function AuditBuilderScreen({ navigation, route }: Props) {
   const seedTemplateId = route.params?.templateId;
 
   const [name, setName] = useState('');
+  const [department, setDepartment] = useState('');
   const [layer, setLayer] = useState<AuditLayer>(AuditLayers[0]);
   const [standard, setStandard] = useState<AuditStandard>(
     defaultStandard(profile?.standard ?? ''),
@@ -344,6 +345,7 @@ export function AuditBuilderScreen({ navigation, route }: Props) {
         name: name.trim(),
         layer,
         standard,
+        department: department.trim(),
         questions: auditQuestions,
         responses: auditQuestions.map((q) => emptyResponse(q.id)),
         passRate: 0,
@@ -353,8 +355,10 @@ export function AuditBuilderScreen({ navigation, route }: Props) {
         layerLevel: layerLevelOf(layer),
         status: 'In Progress',
         assignedTo: profile?.name ?? '',
+        generatedNcrIds: [],
         createdAt: nowISO(),
         completedAt: null,
+        isSampleData: false,
       };
       await createAudit(audit);
       navigation.replace('AuditExecution', { auditId: audit.id });
@@ -422,6 +426,16 @@ export function AuditBuilderScreen({ navigation, route }: Props) {
               placeholder="e.g. Weld Cell LPA — Line 3"
               placeholderTextColor={Colors.secondaryText}
               maxLength={80}
+            />
+          </FormField>
+
+          <FormField label="Department / Area" hint="Optional">
+            <TextInput
+              style={styles.input}
+              value={department}
+              onChangeText={setDepartment}
+              placeholder="e.g. Production, Weld Cell 3"
+              placeholderTextColor={Colors.secondaryText}
             />
           </FormField>
 
@@ -501,6 +515,13 @@ export function AuditBuilderScreen({ navigation, route }: Props) {
               icon="sparkles-outline"
               onPress={onGenerateWithAI}
               disabled={generatingAI}
+              fullWidth
+            />
+            <QuickActionButton
+              label="Browse Prebuilt Question Banks"
+              variant="ghost"
+              icon="library-outline"
+              onPress={() => navigation.navigate('QuestionBank')}
               fullWidth
             />
           </View>

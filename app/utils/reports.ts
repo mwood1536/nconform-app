@@ -80,7 +80,7 @@ export function buildCorrectiveActionHTML(ncrs: NCR[]): string {
     .map((n) => {
       const ca = n.correctiveAction!;
       const overdue =
-        ca.targetDate && new Date(ca.targetDate).getTime() < Date.now() && ca.status !== 'Closed';
+        ca.targetDate && new Date(ca.targetDate).getTime() < Date.now() && ca.status !== 'Verified';
       return `
       <tr>
         <td><strong>${escapeHTML(n.ncrNumber)}</strong></td>

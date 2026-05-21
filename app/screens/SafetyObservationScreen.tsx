@@ -80,6 +80,7 @@ export function SafetyObservationScreen({ navigation }: Props) {
         // wires to a Pro Web workspace. Until then they remain local-only.
         syncedToTeam: teamLinked,
         destinationTeamId: null,
+        isSampleData: false,
       };
       const all = await Storage.getSafetyObservations();
       await Storage.setSafetyObservations([observation, ...all]);

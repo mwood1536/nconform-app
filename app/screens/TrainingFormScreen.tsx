@@ -278,8 +278,11 @@ export function TrainingFormScreen({ navigation, route }: Props) {
           certificationExpiresOn: expiresIso,
           recurrence,
           parentRecordId: null,
+          parentNcrId: null,
           templateId: seedTemplateId ?? null,
+          quiz: null,
           createdAt: nowISO(),
+          isSampleData: false,
         };
         await createRecord(record);
         await scheduleExpiry(record);
@@ -536,6 +539,25 @@ export function TrainingFormScreen({ navigation, route }: Props) {
             disabled={!canSave || submitting}
             fullWidth
           />
+
+          {existing ? (
+            <QuickActionButton
+              label={existing.quiz ? 'Open Verification Quiz' : 'Add Verification Quiz'}
+              variant="outline"
+              icon="help-circle-outline"
+              onPress={() => navigation.navigate('Quiz', { recordId: existing.id })}
+              fullWidth
+            />
+          ) : null}
+
+          {existing?.parentNcrId ? (
+            <View style={styles.linkBack}>
+              <Ionicons name="link-outline" size={14} color={Colors.steelBlue} />
+              <Text style={styles.linkBackText}>
+                Generated from NCR — open the NCR detail to see the original finding.
+              </Text>
+            </View>
+          ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -673,5 +695,21 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: Colors.secondaryText,
     marginTop: 1,
+  },
+  linkBack: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    backgroundColor: Colors.steelBlue + '10',
+    borderRadius: Radii.button,
+    padding: Spacing.md,
+    marginTop: Spacing.md,
+  },
+  linkBackText: {
+    flex: 1,
+    fontSize: 12,
+    color: Colors.steelBlue,
+    fontWeight: '600',
+    lineHeight: 17,
   },
 });

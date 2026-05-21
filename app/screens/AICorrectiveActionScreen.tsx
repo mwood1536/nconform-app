@@ -197,7 +197,7 @@ export function AICorrectiveActionScreen({ navigation, route }: Props) {
         verificationMethod: draft.verificationMethod,
         responsibleParty: draft.responsibleParty,
         targetDate: draft.targetDate,
-        status: 'Active',
+        status: 'Submitted',
         createdAt: nowISO(),
       };
       await attachCorrectiveAction(ncr.id, ca);

@@ -57,6 +57,14 @@ export interface Action {
   createdAt: string;
 }
 
+export type CorrectiveActionStatus =
+  | 'Pending'
+  | 'Submitted'
+  | 'Under Review'
+  | 'Approved'
+  | 'Implemented'
+  | 'Verified';
+
 export interface CorrectiveAction {
   id: string;
   ncrId: string;
@@ -69,8 +77,37 @@ export interface CorrectiveAction {
   verificationMethod: string;
   responsibleParty: string;
   targetDate: string;
-  status: 'Draft' | 'Active' | 'Verified' | 'Closed';
+  status: CorrectiveActionStatus;
   createdAt: string;
+}
+
+export type NCRApprovalStatus =
+  | 'Draft'
+  | 'Submitted'
+  | 'Under Review'
+  | 'Approved'
+  | 'Closed';
+
+export interface ApprovalHistoryEntry {
+  id: string;
+  fromStatus: NCRApprovalStatus | null;
+  toStatus: NCRApprovalStatus;
+  actor: string;
+  timestamp: string;
+  note: string;
+}
+
+export interface ApprovalComment {
+  id: string;
+  author: string;
+  body: string;
+  timestamp: string;
+}
+
+export interface NCRApprovalWorkflow {
+  status: NCRApprovalStatus;
+  history: ApprovalHistoryEntry[];
+  comments: ApprovalComment[];
 }
 
 export interface NCR {
@@ -87,12 +124,17 @@ export interface NCR {
   assignedTo: string;
   dueDate: string;
   status: NCRStatus;
+  department: string;
   createdAt: string;
   updatedAt: string;
   sharedWithRCA: boolean;
   correctiveAction: CorrectiveAction | null;
   actions: Action[];
   timeline: TimelineEvent[];
+  parentAuditId: string | null;
+  generatedTrainingIds: string[];
+  approvalWorkflow: NCRApprovalWorkflow;
+  isSampleData: boolean;
 }
 
 export interface AIcorrectiveActionResponse {
@@ -106,7 +148,6 @@ export interface AIcorrectiveActionResponse {
 }
 
 export interface ConditionalFollowup {
-  // When the parent question is marked Fail, this follow-up applies.
   prompt: string;
   requirePhoto: boolean;
   requireNote: boolean;
@@ -141,7 +182,6 @@ export type RecurrenceFrequency =
 
 export interface AuditRecurrence {
   frequency: RecurrenceFrequency;
-  // For Weekly: 0=Sun..6=Sat; for Monthly: 1-28; for Custom: customIntervalDays.
   dayOfWeek: number | null;
   dayOfMonth: number | null;
   customIntervalDays: number | null;
@@ -155,9 +195,7 @@ export interface AuditTemplate {
   layer: AuditLayer;
   standard: AuditStandard;
   mode: AuditTemplateMode;
-  // For fixed mode the audit always uses these questions in order.
   questions: AuditQuestion[];
-  // For random mode the audit draws sampleSize from questionBank.
   questionBank: AuditQuestion[];
   sampleSize: number;
   recurrence: AuditRecurrence | null;
@@ -170,6 +208,7 @@ export interface Audit {
   name: string;
   layer: AuditLayer;
   standard: AuditStandard;
+  department: string;
   questions: AuditQuestion[];
   responses: AuditResponse[];
   passRate: number;
@@ -179,21 +218,21 @@ export interface Audit {
   layerLevel: number;
   status: AuditStatus;
   assignedTo: string;
+  generatedNcrIds: string[];
   createdAt: string;
   completedAt: string | null;
+  isSampleData: boolean;
 }
 
 export interface ScheduledAudit {
   id: string;
   templateId: string | null;
-  // Pre-resolved label so the schedule list works even after a template rename.
   name: string;
   layer: AuditLayer;
   standard: AuditStandard;
   assignedTo: string;
   dueDate: string;
   status: 'Upcoming' | 'Overdue' | 'Completed' | 'Cancelled';
-  // Set when this schedule was generated automatically by escalation.
   escalationParentAuditId: string | null;
   notificationId: string | null;
   createdAt: string;
@@ -205,13 +244,33 @@ export interface TrainingMaterial {
   id: string;
   type: TrainingMaterialType;
   title: string;
-  // For PDFs this is the cached file URI; for URLs the link.
   uri: string;
 }
 
 export interface TrainingRecurrence {
   frequency: RecurrenceFrequency;
   customIntervalDays: number | null;
+}
+
+export interface QuizQuestion {
+  id: string;
+  prompt: string;
+  options: string[];
+  correctIndex: number;
+}
+
+export interface QuizResponse {
+  questionId: string;
+  selectedIndex: number;
+}
+
+export interface TrainingQuiz {
+  questions: QuizQuestion[];
+  responses: QuizResponse[];
+  takenAt: string | null;
+  scorePercent: number | null;
+  passThreshold: number;
+  passed: boolean | null;
 }
 
 export interface TrainingRecord {
@@ -230,8 +289,11 @@ export interface TrainingRecord {
   certificationExpiresOn: string | null;
   recurrence: TrainingRecurrence | null;
   parentRecordId: string | null;
+  parentNcrId: string | null;
   templateId: string | null;
+  quiz: TrainingQuiz | null;
   createdAt: string;
+  isSampleData: boolean;
 }
 
 export interface ScheduledTraining {
@@ -272,6 +334,23 @@ export interface SafetyObservation {
   location: string;
   createdAt: string;
   syncedToTeam: boolean;
-  // Optional Bundle/Pro Web hook — destination workspace, set when sync wires up.
   destinationTeamId: string | null;
+  isSampleData: boolean;
+}
+
+export interface DetectedPattern {
+  id: string;
+  title: string;
+  summary: string;
+  count: number;
+  relatedNcrIds: string[];
+  suggestedAction: string;
+  severity: 'Low' | 'Medium' | 'High';
+}
+
+export interface PatternsCache {
+  generatedAt: string;
+  cachedUntil: string;
+  patterns: DetectedPattern[];
+  sourceHash: string;
 }

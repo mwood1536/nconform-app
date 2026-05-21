@@ -7,6 +7,8 @@ import {
   AuditTemplate,
   CorrectiveAction,
   NCR,
+  NCRApprovalWorkflow,
+  PatternsCache,
   SafetyObservation,
   ScheduledAudit,
   ScheduledTraining,
@@ -33,6 +35,11 @@ export const StorageKeys = {
   teamDirectory: 'teamDirectory',
   notificationPrefs: 'notificationPrefs',
   safetyObservations: 'safetyObservations',
+  patternsDetected: 'patternsDetected',
+  customDepartments: 'customDepartments',
+  recentSearches: 'recentSearches',
+  tutorialCompleted: 'tutorialCompleted',
+  demoDataLoaded: 'demoDataLoaded',
 } as const;
 
 export interface NotificationPrefs {
@@ -43,6 +50,7 @@ export interface NotificationPrefs {
   auditDueAlerts: boolean;
   trainingOverdueAlerts: boolean;
   certificationExpiryAlerts: boolean;
+  approvalAlerts: boolean;
 }
 
 export const DefaultNotificationPrefs: NotificationPrefs = {
@@ -53,6 +61,7 @@ export const DefaultNotificationPrefs: NotificationPrefs = {
   auditDueAlerts: true,
   trainingOverdueAlerts: true,
   certificationExpiryAlerts: true,
+  approvalAlerts: true,
 };
 
 async function readJSON<T>(key: string, fallback: T): Promise<T> {
@@ -75,8 +84,6 @@ function normalizeRole(value: unknown): UserRole {
     : 'admin';
 }
 
-// Normalize legacy profiles: the retired "team" tier maps to "bundle",
-// and fields added after launch get safe defaults.
 function normalizeProfile(raw: UserProfile | null): UserProfile | null {
   if (!raw) return null;
   const legacyTier = raw.subscriptionTier as SubscriptionTier | 'team';
@@ -94,16 +101,34 @@ function normalizeProfile(raw: UserProfile | null): UserProfile | null {
   };
 }
 
-// NCRs created before the RCA toggle existed default to not shared.
+function defaultApprovalWorkflow(status: NCR['status']): NCRApprovalWorkflow {
+  // Older NCRs predate the approval flow; map their NCRStatus onto the new
+  // workflow status so the UI has something coherent to show.
+  const initial =
+    status === 'Closed' ? 'Closed' : status === 'In Progress' ? 'Under Review' : 'Draft';
+  return {
+    status: initial,
+    history: [],
+    comments: [],
+  };
+}
+
 function normalizeNCR(raw: NCR): NCR {
   return {
     ...raw,
     sharedWithRCA: raw.sharedWithRCA ?? false,
     standardClauses: raw.standardClauses ?? [],
+    department: raw.department ?? '',
+    parentAuditId: raw.parentAuditId ?? null,
+    generatedTrainingIds: raw.generatedTrainingIds ?? [],
+    approvalWorkflow: raw.approvalWorkflow ?? defaultApprovalWorkflow(raw.status),
+    isSampleData: raw.isSampleData ?? false,
   };
 }
 
-function normalizeQuestion(raw: Partial<AuditQuestion> & { id: string; prompt: string }): AuditQuestion {
+function normalizeQuestion(
+  raw: Partial<AuditQuestion> & { id: string; prompt: string },
+): AuditQuestion {
   return {
     id: raw.id,
     prompt: raw.prompt,
@@ -129,12 +154,17 @@ function normalizeResponse(
 function normalizeAudit(raw: Audit): Audit {
   return {
     ...raw,
+    department: raw.department ?? '',
     questions: (raw.questions ?? []).map(normalizeQuestion),
     responses: (raw.responses ?? []).map(normalizeResponse),
-    weightedPassRate: typeof raw.weightedPassRate === 'number' ? raw.weightedPassRate : raw.passRate ?? 0,
+    weightedPassRate:
+      typeof raw.weightedPassRate === 'number' ? raw.weightedPassRate : raw.passRate ?? 0,
     randomizationSeed: raw.randomizationSeed ?? null,
     parentAuditId: raw.parentAuditId ?? null,
-    layerLevel: typeof raw.layerLevel === 'number' ? raw.layerLevel : layerLevelFromLabel(raw.layer),
+    layerLevel:
+      typeof raw.layerLevel === 'number' ? raw.layerLevel : layerLevelFromLabel(raw.layer),
+    generatedNcrIds: raw.generatedNcrIds ?? [],
+    isSampleData: raw.isSampleData ?? false,
   };
 }
 
@@ -170,7 +200,17 @@ function normalizeTrainingRecord(raw: TrainingRecord): TrainingRecord {
     certificationExpiresOn: raw.certificationExpiresOn ?? null,
     recurrence: raw.recurrence ?? null,
     parentRecordId: raw.parentRecordId ?? null,
+    parentNcrId: raw.parentNcrId ?? null,
     templateId: raw.templateId ?? null,
+    quiz: raw.quiz ?? null,
+    isSampleData: raw.isSampleData ?? false,
+  };
+}
+
+function normalizeObservation(raw: SafetyObservation): SafetyObservation {
+  return {
+    ...raw,
+    isSampleData: raw.isSampleData ?? false,
   };
 }
 
@@ -267,7 +307,8 @@ export const Storage = {
   },
 
   async getSafetyObservations(): Promise<SafetyObservation[]> {
-    return readJSON<SafetyObservation[]>(StorageKeys.safetyObservations, []);
+    const items = await readJSON<SafetyObservation[]>(StorageKeys.safetyObservations, []);
+    return items.map(normalizeObservation);
   },
   async setSafetyObservations(items: SafetyObservation[]): Promise<void> {
     await writeJSON(StorageKeys.safetyObservations, items);
@@ -282,6 +323,44 @@ export const Storage = {
   },
   async setNotificationPrefs(prefs: NotificationPrefs): Promise<void> {
     await writeJSON(StorageKeys.notificationPrefs, prefs);
+  },
+
+  async getPatternsCache(): Promise<PatternsCache | null> {
+    return readJSON<PatternsCache | null>(StorageKeys.patternsDetected, null);
+  },
+  async setPatternsCache(cache: PatternsCache): Promise<void> {
+    await writeJSON(StorageKeys.patternsDetected, cache);
+  },
+  async clearPatternsCache(): Promise<void> {
+    await AsyncStorage.removeItem(StorageKeys.patternsDetected);
+  },
+
+  async getCustomDepartments(): Promise<string[]> {
+    return readJSON<string[]>(StorageKeys.customDepartments, []);
+  },
+  async setCustomDepartments(items: string[]): Promise<void> {
+    await writeJSON(StorageKeys.customDepartments, items);
+  },
+
+  async getRecentSearches(): Promise<string[]> {
+    return readJSON<string[]>(StorageKeys.recentSearches, []);
+  },
+  async setRecentSearches(items: string[]): Promise<void> {
+    await writeJSON(StorageKeys.recentSearches, items.slice(0, 10));
+  },
+
+  async getTutorialCompleted(): Promise<boolean> {
+    return readJSON<boolean>(StorageKeys.tutorialCompleted, false);
+  },
+  async setTutorialCompleted(value: boolean): Promise<void> {
+    await writeJSON(StorageKeys.tutorialCompleted, value);
+  },
+
+  async getDemoDataLoaded(): Promise<boolean> {
+    return readJSON<boolean>(StorageKeys.demoDataLoaded, false);
+  },
+  async setDemoDataLoaded(value: boolean): Promise<void> {
+    await writeJSON(StorageKeys.demoDataLoaded, value);
   },
 
   async nextNCRNumber(): Promise<string> {
@@ -307,6 +386,11 @@ export const Storage = {
       StorageKeys.teamDirectory,
       StorageKeys.notificationPrefs,
       StorageKeys.safetyObservations,
+      StorageKeys.patternsDetected,
+      StorageKeys.customDepartments,
+      StorageKeys.recentSearches,
+      StorageKeys.tutorialCompleted,
+      StorageKeys.demoDataLoaded,
     ]);
   },
 };

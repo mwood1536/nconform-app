@@ -26,16 +26,30 @@ import { StatusBadge } from '../components/StatusBadge';
 import { TimelineItem } from '../components/TimelineItem';
 import { Colors, Radii, Shadow, Spacing } from '../constants/colors';
 import { useNCRs } from '../hooks/useNCRs';
+import { useProfile } from '../hooks/useProfile';
+import { useTeamDirectory } from '../hooks/useTeamDirectory';
+import { useTraining } from '../hooks/useTraining';
 import { RootStackParamList } from '../navigation/types';
-import { Action } from '../types';
-import { formatDate, isOverdue } from '../utils/ncrHelpers';
+import { Action, NCRApprovalStatus, TrainingRecord } from '../types';
+import { suggestTrainingFromNCR } from '../utils/apiHelpers';
+import {
+  addApprovalComment,
+  approvalStatusColor,
+  ncrStatusFromApproval,
+  nextApprovalStatuses,
+  transitionApproval,
+} from '../utils/approval';
+import { formatDate, formatDateTime, generateId, isOverdue, nowISO } from '../utils/ncrHelpers';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'NCRDetail'>;
 
 export function NCRDetailScreen({ navigation, route }: Props) {
   const { ncrId } = route.params;
-  const { ncrs, reload, setStatus, addAction, toggleAction, setRCAShared, deleteNCR } =
+  const { ncrs, reload, setStatus, addAction, toggleAction, setRCAShared, deleteNCR, updateNCR } =
     useNCRs();
+  const { profile } = useProfile();
+  const { members } = useTeamDirectory();
+  const { records: trainingRecords, createRecord } = useTraining();
 
   useFocusEffect(
     useCallback(() => {
@@ -49,6 +63,8 @@ export function NCRDetailScreen({ navigation, route }: Props) {
   const [actionAssignee, setActionAssignee] = useState('');
   const [actionDueDate, setActionDueDate] = useState<Date | null>(null);
   const [showDate, setShowDate] = useState(false);
+  const [commentDraft, setCommentDraft] = useState('');
+  const [suggestingTraining, setSuggestingTraining] = useState(false);
 
   if (!ncr) {
     return (
@@ -91,6 +107,126 @@ export function NCRDetailScreen({ navigation, route }: Props) {
   const onChangeDate = (_event: DateTimePickerEvent, selected?: Date) => {
     if (Platform.OS === 'android') setShowDate(false);
     if (selected) setActionDueDate(selected);
+  };
+
+  const actorName = profile?.name?.trim() || 'You';
+
+  const onTransitionApproval = async (to: NCRApprovalStatus) => {
+    if (!ncr) return;
+    const wf = transitionApproval(ncr.approvalWorkflow, to, actorName);
+    await updateNCR(ncr.id, {
+      approvalWorkflow: wf,
+      status: ncrStatusFromApproval(to),
+    });
+  };
+
+  const onReject = () => {
+    if (!ncr) return;
+    // Alert.prompt is iOS-only; on Android we send back to Draft with a fixed
+    // note since there is no built-in inline input. Users can elaborate in the
+    // Comments thread below.
+    const promptFn = (Alert as unknown as {
+      prompt?: (title: string, msg: string, cb: (text?: string) => void) => void;
+    }).prompt;
+    if (Platform.OS === 'ios' && typeof promptFn === 'function') {
+      promptFn('Reject with comments', 'Add a brief reason — logged in history.', async (text) => {
+        const reason = (text ?? '').trim() || 'Rejected — see comments';
+        const wf = addApprovalComment(ncr.approvalWorkflow, actorName, `Rejected: ${reason}`);
+        const wf2 = transitionApproval(wf, 'Draft', actorName, `Rejected — ${reason}`);
+        await updateNCR(ncr.id, {
+          approvalWorkflow: wf2,
+          status: ncrStatusFromApproval('Draft'),
+        });
+      });
+      return;
+    }
+    void (async () => {
+      const wf = transitionApproval(
+        ncr.approvalWorkflow,
+        'Draft',
+        actorName,
+        'Rejected — send to author',
+      );
+      await updateNCR(ncr.id, {
+        approvalWorkflow: wf,
+        status: ncrStatusFromApproval('Draft'),
+      });
+    })();
+  };
+
+  const onAddComment = async () => {
+    if (!ncr || !commentDraft.trim()) return;
+    const wf = addApprovalComment(ncr.approvalWorkflow, actorName, commentDraft.trim());
+    await updateNCR(ncr.id, { approvalWorkflow: wf });
+    setCommentDraft('');
+  };
+
+  const relatedTraining = trainingRecords.filter(
+    (r) => r.parentNcrId === ncr.id || ncr.generatedTrainingIds.includes(r.id),
+  );
+
+  const onSuggestTraining = async () => {
+    if (!ncr) return;
+    setSuggestingTraining(true);
+    try {
+      const ca = ncr.correctiveAction;
+      const knownEmployees = members.map((m) => m.name).filter(Boolean);
+      const suggestion = await suggestTrainingFromNCR(
+        ncr.title,
+        ncr.description,
+        ca?.rootCause ?? '',
+        knownEmployees,
+      );
+      Alert.alert(
+        'Suggested training',
+        `Topic: ${suggestion.topic}\n\nReason: ${suggestion.reason}\n\nEmployees: ${
+          suggestion.suggestedEmployees.join(', ') || 'Open assignment'
+        }\n\nMaterial types: ${suggestion.materialTypes.join(', ')}`,
+        [
+          { text: 'Skip', style: 'cancel' },
+          {
+            text: 'Create Training Record',
+            onPress: async () => {
+              const employeeName =
+                suggestion.suggestedEmployees[0] || ncr.assignedTo || 'To be assigned';
+              const record: TrainingRecord = {
+                id: generateId('trn'),
+                employeeName,
+                topic: suggestion.topic,
+                standardRef: ca?.standardReference || ncr.standardRef,
+                trainerName: '',
+                dateCompleted: '',
+                notes: `Generated from ${ncr.ncrNumber}. ${suggestion.reason}`,
+                photo: null,
+                signOffStatement: null,
+                signedAt: null,
+                status: 'Pending',
+                materials: [],
+                certificationExpiresOn: null,
+                recurrence: null,
+                parentRecordId: null,
+                parentNcrId: ncr.id,
+                templateId: null,
+                quiz: null,
+                createdAt: nowISO(),
+                isSampleData: false,
+              };
+              await createRecord(record);
+              await updateNCR(ncr.id, {
+                generatedTrainingIds: [...ncr.generatedTrainingIds, record.id],
+              });
+            },
+          },
+        ],
+      );
+    } catch (err) {
+      Alert.alert(
+        'Could not suggest training',
+        err instanceof Error ? err.message : 'Please try again.',
+      );
+    } finally {
+      setSuggestingTraining(false);
+    }
   };
 
   const onDelete = () => {
@@ -286,6 +422,163 @@ export function NCRDetailScreen({ navigation, route }: Props) {
               />
             ))}
           </View>
+        </View>
+
+        {ncr.parentAuditId ? (
+          <View style={styles.linkCard}>
+            <Ionicons name="git-branch-outline" size={16} color={Colors.steelBlue} />
+            <Text style={styles.linkCardText}>
+              Generated from audit · tap History on the audit to see the chain.
+            </Text>
+          </View>
+        ) : null}
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Approval Workflow</Text>
+          <View style={styles.approvalCard}>
+            <View style={styles.approvalHeader}>
+              <Text style={styles.approvalEyebrow}>STATUS</Text>
+              <View
+                style={[
+                  styles.approvalPill,
+                  {
+                    backgroundColor: approvalStatusColor(ncr.approvalWorkflow.status) + '14',
+                    borderColor: approvalStatusColor(ncr.approvalWorkflow.status) + '50',
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.approvalPillText,
+                    { color: approvalStatusColor(ncr.approvalWorkflow.status) },
+                  ]}
+                >
+                  {ncr.approvalWorkflow.status}
+                </Text>
+              </View>
+            </View>
+            <Text style={styles.approvalSub}>
+              Pro Web tier enforces transitions by role. On mobile any user can advance the
+              workflow.
+            </Text>
+            <View style={styles.approvalActions}>
+              {nextApprovalStatuses(ncr.approvalWorkflow.status).map((next) => (
+                <QuickActionButton
+                  key={next}
+                  label={
+                    next === 'Submitted'
+                      ? 'Submit for Approval'
+                      : next === 'Approved'
+                        ? 'Approve'
+                        : next === 'Closed'
+                          ? 'Close NCR'
+                          : `Move to ${next}`
+                  }
+                  variant={next === 'Approved' || next === 'Closed' ? 'primary' : 'outline'}
+                  icon="checkmark-circle-outline"
+                  onPress={() => onTransitionApproval(next)}
+                  fullWidth
+                />
+              ))}
+              {ncr.approvalWorkflow.status === 'Submitted' ||
+              ncr.approvalWorkflow.status === 'Under Review' ? (
+                <QuickActionButton
+                  label="Reject with Comments"
+                  variant="ghost"
+                  icon="close-circle-outline"
+                  onPress={onReject}
+                  fullWidth
+                />
+              ) : null}
+            </View>
+
+            {ncr.approvalWorkflow.history.length > 0 ? (
+              <View style={styles.historyBlock}>
+                <Text style={styles.historyLabel}>History</Text>
+                {ncr.approvalWorkflow.history.slice(-5).reverse().map((h) => (
+                  <View key={h.id} style={styles.historyRow}>
+                    <Ionicons name="time-outline" size={12} color={Colors.secondaryText} />
+                    <Text style={styles.historyText} numberOfLines={2}>
+                      {h.fromStatus ? `${h.fromStatus} → ${h.toStatus}` : `Initialized as ${h.toStatus}`}
+                      {' · '}
+                      {h.actor}
+                      {' · '}
+                      {formatDateTime(h.timestamp)}
+                      {h.note ? `\n${h.note}` : ''}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+
+            <View style={styles.commentsBlock}>
+              <Text style={styles.historyLabel}>Comments ({ncr.approvalWorkflow.comments.length})</Text>
+              {ncr.approvalWorkflow.comments.slice(-5).map((c) => (
+                <View key={c.id} style={styles.commentRow}>
+                  <Text style={styles.commentAuthor}>{c.author}</Text>
+                  <Text style={styles.commentBody}>{c.body}</Text>
+                  <Text style={styles.commentMeta}>{formatDateTime(c.timestamp)}</Text>
+                </View>
+              ))}
+              <TextInput
+                style={styles.commentInput}
+                value={commentDraft}
+                onChangeText={setCommentDraft}
+                placeholder="Add a comment…"
+                placeholderTextColor={Colors.secondaryText}
+                multiline
+              />
+              <QuickActionButton
+                label="Post Comment"
+                variant="outline"
+                icon="chatbox-outline"
+                onPress={onAddComment}
+                disabled={!commentDraft.trim()}
+                fullWidth
+              />
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <View style={styles.actionsHeader}>
+            <Text style={styles.sectionTitle}>Related Training</Text>
+            <Pressable
+              onPress={onSuggestTraining}
+              disabled={suggestingTraining}
+              hitSlop={8}
+            >
+              <Text style={styles.addLink}>
+                {suggestingTraining ? '…' : '+ Suggest Training'}
+              </Text>
+            </Pressable>
+          </View>
+          {relatedTraining.length === 0 ? (
+            <Text style={styles.emptyInline}>
+              Was this caused by a training gap? Tap Suggest Training to generate a plan.
+            </Text>
+          ) : (
+            <View style={{ gap: Spacing.sm }}>
+              {relatedTraining.map((r) => (
+                <Pressable
+                  key={r.id}
+                  onPress={() => navigation.navigate('TrainingForm', { recordId: r.id })}
+                  style={({ pressed }) => [styles.trainingRow, pressed && { opacity: 0.9 }]}
+                >
+                  <View style={styles.trainingIcon}>
+                    <Ionicons name="school-outline" size={16} color={Colors.steelBlue} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.trainingTitle}>{r.topic}</Text>
+                    <Text style={styles.trainingMeta}>
+                      {r.employeeName} · {r.status}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color={Colors.secondaryText} />
+                </Pressable>
+              ))}
+            </View>
+          )}
         </View>
 
         <View style={styles.statusActions}>
@@ -787,5 +1080,152 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     gap: Spacing.sm,
     marginTop: Spacing.sm,
+  },
+  approvalCard: {
+    backgroundColor: Colors.card,
+    borderRadius: Radii.card,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: Spacing.lg,
+    gap: Spacing.sm,
+    ...Shadow.card,
+  },
+  approvalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  approvalEyebrow: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    color: Colors.secondaryText,
+  },
+  approvalPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: Radii.pill,
+    borderWidth: 1,
+  },
+  approvalPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  approvalSub: {
+    fontSize: 12,
+    color: Colors.secondaryText,
+    lineHeight: 16,
+  },
+  approvalActions: {
+    gap: Spacing.sm,
+  },
+  historyBlock: {
+    paddingTop: Spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    gap: 6,
+  },
+  historyLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    color: Colors.secondaryText,
+    textTransform: 'uppercase',
+  },
+  historyRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+  },
+  historyText: {
+    flex: 1,
+    fontSize: 11,
+    color: Colors.bodyText,
+    lineHeight: 15,
+  },
+  commentsBlock: {
+    paddingTop: Spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    gap: 6,
+  },
+  commentRow: {
+    backgroundColor: Colors.background,
+    borderRadius: Radii.button,
+    padding: Spacing.sm,
+  },
+  commentAuthor: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.navy,
+  },
+  commentBody: {
+    fontSize: 13,
+    color: Colors.bodyText,
+    marginTop: 2,
+    lineHeight: 18,
+  },
+  commentMeta: {
+    fontSize: 10,
+    color: Colors.secondaryText,
+    marginTop: 4,
+  },
+  commentInput: {
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: Radii.button,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: Colors.background,
+    color: Colors.bodyText,
+    fontSize: 13,
+    minHeight: 60,
+    textAlignVertical: 'top',
+    marginTop: Spacing.xs,
+  },
+  linkCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    backgroundColor: Colors.steelBlue + '10',
+    borderRadius: Radii.button,
+    padding: Spacing.md,
+  },
+  linkCardText: {
+    flex: 1,
+    fontSize: 12,
+    color: Colors.steelBlue,
+    fontWeight: '600',
+    lineHeight: 17,
+  },
+  trainingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: Radii.card,
+    padding: Spacing.md,
+  },
+  trainingIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: Colors.steelBlue + '14',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  trainingTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.navy,
+  },
+  trainingMeta: {
+    fontSize: 11,
+    color: Colors.secondaryText,
+    marginTop: 2,
   },
 });

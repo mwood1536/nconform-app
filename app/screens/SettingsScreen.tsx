@@ -47,6 +47,7 @@ import {
 } from '../utils/subscription';
 import { effectiveTrainingStatus, expiringBuckets } from '../utils/training';
 import { roleDescription, roleLabel, RoleOptions } from '../utils/permissions';
+import { loadSampleData, removeSampleData } from '../utils/sampleData';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
 
@@ -453,7 +454,23 @@ export function SettingsScreen({ navigation }: Props) {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.navTitle}>Standards Reference</Text>
-              <Text style={styles.navSub}>ISO 9001 · IATF 16949 · AS9100 · OSHA</Text>
+              <Text style={styles.navSub}>ISO 9001 · IATF 16949 · AS9100 · OSHA · ISO 14001 · ISO 45001 · FDA 21 CFR 820</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={Colors.secondaryText} />
+          </Pressable>
+        </SectionCard>
+
+        <SectionCard title="Departments">
+          <Pressable
+            onPress={() => navigation.navigate('ManageDepartments')}
+            style={({ pressed }) => [styles.navRow, pressed && { opacity: 0.85 }]}
+          >
+            <View style={styles.navIcon}>
+              <Ionicons name="business-outline" size={18} color={Colors.navy} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.navTitle}>Manage Departments</Text>
+              <Text style={styles.navSub}>Add or remove custom labels for NCRs and audits.</Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={Colors.secondaryText} />
           </Pressable>
@@ -513,6 +530,22 @@ export function SettingsScreen({ navigation }: Props) {
           </Pressable>
         </SectionCard>
 
+        <SectionCard title="Help">
+          <Pressable
+            onPress={() => navigation.navigate('HelpFAQ')}
+            style={({ pressed }) => [styles.navRow, pressed && { opacity: 0.85 }]}
+          >
+            <View style={styles.navIcon}>
+              <Ionicons name="help-circle-outline" size={18} color={Colors.navy} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.navTitle}>Help & FAQ</Text>
+              <Text style={styles.navSub}>How NConform works, by topic. Email support inside.</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={Colors.secondaryText} />
+          </Pressable>
+        </SectionCard>
+
         <SectionCard title="About NConform">
           <InfoRow label="Version" value={version} />
           <InfoRow label="Publisher" value="IronStratos LLC" />
@@ -533,6 +566,61 @@ export function SettingsScreen({ navigation }: Props) {
         </SectionCard>
 
         <SectionCard title="Data">
+          <QuickActionButton
+            label="Load Demo Data"
+            variant="outline"
+            icon="sparkles-outline"
+            onPress={() => {
+              Alert.alert(
+                'Load demo data?',
+                'Adds 8–10 sample NCRs, 3 audit templates, 2 audits, 5 training records, and 2 safety observations. Tagged DEMO for easy removal.',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: 'Load',
+                    onPress: async () => {
+                      await loadSampleData();
+                      Alert.alert('Loaded', 'Demo data added. Look for DEMO badges.');
+                    },
+                  },
+                ],
+              );
+            }}
+            fullWidth
+          />
+          <QuickActionButton
+            label="Remove Demo Data"
+            variant="ghost"
+            icon="trash-bin-outline"
+            onPress={() => {
+              Alert.alert(
+                'Remove demo data?',
+                'Only items tagged DEMO will be removed. Your real records are untouched.',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: 'Remove',
+                    style: 'destructive',
+                    onPress: async () => {
+                      await removeSampleData();
+                      Alert.alert('Removed', 'Demo data deleted.');
+                    },
+                  },
+                ],
+              );
+            }}
+            fullWidth
+          />
+          <QuickActionButton
+            label="Replay Tutorial"
+            variant="ghost"
+            icon="play-circle-outline"
+            onPress={async () => {
+              await Storage.setTutorialCompleted(false);
+              Alert.alert('Tutorial reset', 'The tour will replay next time you open Home.');
+            }}
+            fullWidth
+          />
           <QuickActionButton
             label="Reset Onboarding"
             variant="ghost"

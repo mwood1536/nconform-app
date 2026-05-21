@@ -24,6 +24,7 @@ import { useAudits } from '../hooks/useAudits';
 import { useNCRs } from '../hooks/useNCRs';
 import { RootStackParamList } from '../navigation/types';
 import { Audit, AuditResponse } from '../types';
+import { enrichAuditFailureNCR } from '../utils/apiHelpers';
 import {
   computePassRates,
   emptyResponse,
@@ -65,6 +66,9 @@ export function AuditExecutionScreen({ navigation, route }: Props) {
   const [responses, setResponses] = useState<AuditResponse[] | null>(null);
   const [completed, setCompleted] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [selectedFailureIds, setSelectedFailureIds] = useState<Record<string, boolean> | null>(null);
+  const [combineMode, setCombineMode] = useState(false);
+  const [useAIAssist, setUseAIAssist] = useState(true);
 
   const working: AuditResponse[] = responses ?? audit?.responses ?? [];
 
@@ -159,6 +163,7 @@ export function AuditExecutionScreen({ navigation, route }: Props) {
       name: `Escalation: ${parent.name}`,
       layer: nextLayer,
       standard: parent.standard,
+      department: parent.department,
       questions: escalatedQuestions,
       responses: escalatedQuestions.map((q) => emptyResponse(q.id)),
       passRate: 0,
@@ -168,8 +173,10 @@ export function AuditExecutionScreen({ navigation, route }: Props) {
       layerLevel: level,
       status: 'Scheduled',
       assignedTo: parent.assignedTo,
+      generatedNcrIds: [],
       createdAt: nowISO(),
       completedAt: null,
+      isSampleData: false,
     };
     await createAudit(escalated);
 
@@ -235,40 +242,127 @@ export function AuditExecutionScreen({ navigation, route }: Props) {
     setCompleted(true);
   };
 
+  const selectedIds = (): string[] => {
+    if (selectedFailureIds === null) {
+      // Default: everything selected.
+      return failedResponses.map((r) => r.questionId);
+    }
+    return failedResponses
+      .filter((r) => selectedFailureIds[r.questionId] !== false)
+      .map((r) => r.questionId);
+  };
+
+  const toggleSelection = (questionId: string) => {
+    setSelectedFailureIds((prev) => {
+      const base = prev ?? Object.fromEntries(failedResponses.map((r) => [r.questionId, true]));
+      return { ...base, [questionId]: !(base[questionId] ?? true) };
+    });
+  };
+
   const onGenerateNCRs = async () => {
     if (failedResponses.length === 0) return;
+    const ids = selectedIds();
+    if (ids.length === 0) {
+      Alert.alert('Nothing selected', 'Pick at least one failed item or skip all.');
+      return;
+    }
     setGenerating(true);
     try {
-      for (const r of failedResponses) {
-        const q = audit.questions.find((x) => x.id === r.questionId);
-        if (!q) continue;
-        const photos = [
-          ...(r.photo ? [{ uri: r.photo, capturedAt: nowISO() }] : []),
-          ...(r.followUpPhoto ? [{ uri: r.followUpPhoto, capturedAt: nowISO() }] : []),
-        ];
-        await createNCR({
-          title: `LPA Finding — ${q.prompt.slice(0, 60)}`,
+      const generatedIds: string[] = [];
+      if (combineMode) {
+        const photos = ids.flatMap((id) => {
+          const r = working.find((x) => x.questionId === id);
+          if (!r) return [];
+          return [
+            ...(r.photo ? [{ uri: r.photo, capturedAt: nowISO() }] : []),
+            ...(r.followUpPhoto ? [{ uri: r.followUpPhoto, capturedAt: nowISO() }] : []),
+          ];
+        });
+        const lines = ids.map((id) => {
+          const r = working.find((x) => x.questionId === id);
+          const q = audit.questions.find((x) => x.id === id);
+          if (!r || !q) return '';
+          return `• ${q.prompt}${r.note ? ` — ${r.note}` : ''}`;
+        });
+        const created = await createNCR({
+          title: `LPA Findings — ${audit.name} (${ids.length} items)`,
           detectionPoint: 'Internal Audit',
-          severity: q.weight >= 4 ? 'High' : 'Medium',
+          severity: 'Medium',
           standardRef: standardRefFor(audit.standard),
           description:
+            `Combined findings from audit "${audit.name}" (${audit.layer}, ${audit.standard}).\n\n` +
+            lines.join('\n'),
+          photos,
+          containmentAction: '',
+          assignedTo: audit.assignedTo,
+          dueDate: '',
+          department: audit.department,
+          parentAuditId: audit.id,
+        });
+        generatedIds.push(created.id);
+      } else {
+        for (const id of ids) {
+          const r = working.find((x) => x.questionId === id);
+          const q = audit.questions.find((x) => x.id === id);
+          if (!r || !q) continue;
+          const photos = [
+            ...(r.photo ? [{ uri: r.photo, capturedAt: nowISO() }] : []),
+            ...(r.followUpPhoto ? [{ uri: r.followUpPhoto, capturedAt: nowISO() }] : []),
+          ];
+          // Title / description / severity defaults. AI assist replaces them
+          // if the user opted in; we fall back to deterministic defaults on
+          // AI failure so the workflow never blocks.
+          let title = `LPA Finding — ${q.prompt.slice(0, 60)}`;
+          let severity: 'Low' | 'Medium' | 'High' | 'Critical' =
+            q.weight >= 4 ? 'High' : 'Medium';
+          let description =
             `Failed item from audit "${audit.name}" (${audit.layer}, ${audit.standard}).\n\n` +
             `Question: ${q.prompt}\n` +
             (r.note ? `Auditor note: ${r.note}\n` : '') +
             (q.followUpOnFail && r.followUpAnswer
               ? `Follow-up (${q.followUpOnFail.prompt}): ${r.followUpAnswer}`
-              : ''),
-          photos,
-          containmentAction: '',
-          assignedTo: audit.assignedTo,
-          dueDate: '',
-        });
+              : '');
+          if (useAIAssist) {
+            try {
+              const enriched = await enrichAuditFailureNCR(
+                audit.name,
+                q.prompt,
+                r.note,
+                q.weight,
+                audit.standard,
+              );
+              title = enriched.title;
+              severity = enriched.suggestedSeverity;
+              if (enriched.description) {
+                description = enriched.description + '\n\n' + description;
+              }
+            } catch {
+              // keep deterministic defaults
+            }
+          }
+          const created = await createNCR({
+            title,
+            detectionPoint: 'Internal Audit',
+            severity,
+            standardRef: standardRefFor(audit.standard),
+            description,
+            photos,
+            containmentAction: '',
+            assignedTo: audit.assignedTo,
+            dueDate: '',
+            department: audit.department,
+            parentAuditId: audit.id,
+          });
+          generatedIds.push(created.id);
+        }
       }
+      // Track which NCRs came from this audit so the audit detail can show them.
+      await updateAudit(audit.id, {
+        generatedNcrIds: [...audit.generatedNcrIds, ...generatedIds],
+      });
       Alert.alert(
         'NCRs created',
-        `${failedResponses.length} nonconformance${
-          failedResponses.length === 1 ? '' : 's'
-        } generated from failed items.`,
+        `${generatedIds.length} nonconformance${generatedIds.length === 1 ? '' : 's'} generated from failed items.`,
         [{ text: 'Done', onPress: () => navigation.navigate('Main', { screen: 'NCRs' }) }],
       );
     } catch {
@@ -322,35 +416,113 @@ export function AuditExecutionScreen({ navigation, route }: Props) {
               <Text style={styles.cleanText}>No failed items. Clean audit.</Text>
             </View>
           ) : (
-            <View style={{ gap: Spacing.sm }}>
-              {failedResponses.map((r) => {
-                const q = audit.questions.find((x) => x.id === r.questionId);
-                return (
-                  <View key={r.questionId} style={styles.failRow}>
-                    <Ionicons name="close-circle" size={18} color={Colors.errorRed} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.failText}>{q?.prompt}</Text>
-                      {r.note ? <Text style={styles.failNote}>{r.note}</Text> : null}
-                      {q?.followUpOnFail && r.followUpAnswer ? (
-                        <Text style={styles.failNote}>Follow-up: {r.followUpAnswer}</Text>
-                      ) : null}
-                    </View>
-                  </View>
-                );
-              })}
-            </View>
-          )}
+            <>
+              <Text style={styles.prompt}>
+                {failedResponses.length} question
+                {failedResponses.length === 1 ? '' : 's'} failed. Generate NCRs?
+              </Text>
+              <View style={{ gap: Spacing.sm }}>
+                {failedResponses.map((r) => {
+                  const q = audit.questions.find((x) => x.id === r.questionId);
+                  const checked =
+                    selectedFailureIds === null
+                      ? true
+                      : selectedFailureIds[r.questionId] !== false;
+                  return (
+                    <Pressable
+                      key={r.questionId}
+                      onPress={() => toggleSelection(r.questionId)}
+                      style={({ pressed }) => [styles.failRow, pressed && { opacity: 0.92 }]}
+                    >
+                      <Ionicons
+                        name={checked ? 'checkbox' : 'square-outline'}
+                        size={20}
+                        color={checked ? Colors.navy : Colors.secondaryText}
+                      />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.failText}>{q?.prompt}</Text>
+                        {r.note ? <Text style={styles.failNote}>{r.note}</Text> : null}
+                        {q?.followUpOnFail && r.followUpAnswer ? (
+                          <Text style={styles.failNote}>Follow-up: {r.followUpAnswer}</Text>
+                        ) : null}
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </View>
 
-          {failedResponses.length > 0 ? (
-            <QuickActionButton
-              label={generating ? 'Generating…' : 'Generate NCR from failed items'}
-              variant="amber"
-              icon="construct-outline"
-              onPress={onGenerateNCRs}
-              disabled={generating}
-              fullWidth
-            />
-          ) : null}
+              <View style={styles.optionsRow}>
+                <Pressable
+                  onPress={() => setCombineMode((v) => !v)}
+                  style={({ pressed }) => [
+                    styles.optionPill,
+                    combineMode && styles.optionPillActive,
+                    pressed && { opacity: 0.85 },
+                  ]}
+                >
+                  <Ionicons
+                    name={combineMode ? 'layers' : 'layers-outline'}
+                    size={14}
+                    color={combineMode ? Colors.card : Colors.bodyText}
+                  />
+                  <Text
+                    style={[
+                      styles.optionPillText,
+                      combineMode && styles.optionPillTextActive,
+                    ]}
+                  >
+                    {combineMode ? 'Combined into 1 NCR' : 'One NCR per failure'}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => setUseAIAssist((v) => !v)}
+                  style={({ pressed }) => [
+                    styles.optionPill,
+                    useAIAssist && styles.optionPillActive,
+                    pressed && { opacity: 0.85 },
+                  ]}
+                >
+                  <Ionicons
+                    name="sparkles-outline"
+                    size={14}
+                    color={useAIAssist ? Colors.card : Colors.bodyText}
+                  />
+                  <Text
+                    style={[
+                      styles.optionPillText,
+                      useAIAssist && styles.optionPillTextActive,
+                    ]}
+                  >
+                    {useAIAssist ? 'AI assist on' : 'AI assist off'}
+                  </Text>
+                </Pressable>
+              </View>
+
+              <QuickActionButton
+                label={
+                  generating
+                    ? 'Generating…'
+                    : combineMode
+                      ? 'Generate 1 combined NCR'
+                      : `Generate ${selectedIds().length} NCR${selectedIds().length === 1 ? '' : 's'}`
+                }
+                variant="amber"
+                icon="construct-outline"
+                onPress={onGenerateNCRs}
+                disabled={generating}
+                fullWidth
+              />
+              {audit.generatedNcrIds.length > 0 ? (
+                <View style={styles.linkCardSmall}>
+                  <Ionicons name="link-outline" size={14} color={Colors.steelBlue} />
+                  <Text style={styles.linkCardSmallText}>
+                    {audit.generatedNcrIds.length} NCR
+                    {audit.generatedNcrIds.length === 1 ? '' : 's'} already generated from this audit.
+                  </Text>
+                </View>
+              ) : null}
+            </>
+          )}
           <QuickActionButton
             label="Back to Audits"
             variant="primary"
@@ -766,5 +938,53 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.secondaryText,
     marginTop: 2,
+  },
+  prompt: {
+    fontSize: 14,
+    color: Colors.bodyText,
+    fontWeight: '600',
+  },
+  optionsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+    marginTop: Spacing.xs,
+  },
+  optionPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: Radii.pill,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.card,
+  },
+  optionPillActive: {
+    backgroundColor: Colors.navy,
+    borderColor: Colors.navy,
+  },
+  optionPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.bodyText,
+  },
+  optionPillTextActive: {
+    color: Colors.card,
+  },
+  linkCardSmall: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    backgroundColor: Colors.steelBlue + '10',
+    borderRadius: Radii.button,
+    padding: Spacing.sm,
+  },
+  linkCardSmallText: {
+    flex: 1,
+    fontSize: 12,
+    color: Colors.steelBlue,
+    fontWeight: '600',
   },
 });

@@ -14,6 +14,9 @@ interface CreateNCRInput {
   containmentAction: string;
   assignedTo: string;
   dueDate: string;
+  department?: string;
+  parentAuditId?: string | null;
+  isSampleData?: boolean;
 }
 
 interface UseNCRsResult {
@@ -69,6 +72,7 @@ export function useNCRs(): UseNCRsResult {
         containmentAction: input.containmentAction,
         assignedTo: input.assignedTo,
         dueDate: input.dueDate,
+        department: input.department ?? '',
         status: 'Open',
         createdAt: ts,
         updatedAt: ts,
@@ -83,6 +87,23 @@ export function useNCRs(): UseNCRsResult {
             timestamp: ts,
           },
         ],
+        parentAuditId: input.parentAuditId ?? null,
+        generatedTrainingIds: [],
+        approvalWorkflow: {
+          status: 'Draft',
+          history: [
+            {
+              id: generateId('apv'),
+              fromStatus: null,
+              toStatus: 'Draft',
+              actor: input.assignedTo || 'System',
+              timestamp: ts,
+              note: 'NCR created',
+            },
+          ],
+          comments: [],
+        },
+        isSampleData: input.isSampleData ?? false,
       };
       const next = [ncr, ...(await Storage.getNCRs())];
       await persist(next);

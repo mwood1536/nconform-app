@@ -345,6 +345,225 @@ export async function suggestStandards(
   }
 }
 
+// Pattern detection — find recurring themes across the user's last 90d
+// NCRs + audit fails. Returns 0–5 short pattern cards. Available to all tiers.
+export interface DetectedPatternRaw {
+  title: string;
+  summary: string;
+  count: number;
+  relatedNcrIds: string[];
+  suggestedAction: string;
+  severity: 'Low' | 'Medium' | 'High';
+}
+
+export async function detectPatterns(input: {
+  ncrSummaries: Array<{
+    id: string;
+    title: string;
+    description: string;
+    department: string;
+    severity: string;
+    createdAt: string;
+    rootCause?: string;
+  }>;
+  auditFailures: Array<{
+    auditName: string;
+    layer: string;
+    failedPrompt: string;
+    createdAt: string;
+  }>;
+}): Promise<DetectedPatternRaw[]> {
+  if (input.ncrSummaries.length < 3) return [];
+  const userContent =
+    'Look across the last 90 days of nonconformances and audit failures below. ' +
+    'Identify up to 5 recurring patterns (same machine, area, process, or root cause theme). ' +
+    'For each pattern return: title (<=60 chars), summary (1 sentence), count (number of related incidents), ' +
+    'relatedNcrIds (array of NCR IDs from input), suggestedAction (1 sentence), severity (Low|Medium|High). ' +
+    'Return ONLY JSON array, no prose.\n\n' +
+    `NCRs:\n${JSON.stringify(input.ncrSummaries, null, 2)}\n\n` +
+    `AuditFailures:\n${JSON.stringify(input.auditFailures, null, 2)}`;
+
+  const raw = await callAnthropicText(
+    'You are a quality manager spotting recurring patterns across nonconformances and audit failures. Return only valid JSON.',
+    userContent,
+    1500,
+  );
+  try {
+    const parsed = JSON.parse(sliceJSON(raw)) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((p): DetectedPatternRaw | null => {
+        const obj = p as Partial<DetectedPatternRaw>;
+        if (!obj.title || !obj.summary) return null;
+        return {
+          title: String(obj.title).slice(0, 80),
+          summary: String(obj.summary).slice(0, 240),
+          count: typeof obj.count === 'number' ? obj.count : (obj.relatedNcrIds?.length ?? 1),
+          relatedNcrIds: Array.isArray(obj.relatedNcrIds)
+            ? obj.relatedNcrIds.filter((x): x is string => typeof x === 'string')
+            : [],
+          suggestedAction: String(obj.suggestedAction ?? '').slice(0, 240),
+          severity:
+            obj.severity === 'High' || obj.severity === 'Low' ? obj.severity : 'Medium',
+        };
+      })
+      .filter((p): p is DetectedPatternRaw => p !== null)
+      .slice(0, 5);
+  } catch {
+    return [];
+  }
+}
+
+// NCR → Training: when corrective action root cause looks like a training
+// gap, suggest a training plan to close the loop.
+export interface TrainingSuggestion {
+  topic: string;
+  reason: string;
+  suggestedEmployees: string[];
+  materialTypes: string[]; // e.g. ["video", "document", "hands-on"]
+}
+
+export async function suggestTrainingFromNCR(
+  ncrTitle: string,
+  ncrDescription: string,
+  rootCause: string,
+  knownEmployees: string[],
+): Promise<TrainingSuggestion> {
+  const userContent =
+    `NCR title: ${ncrTitle}\n` +
+    `NCR description: ${ncrDescription}\n` +
+    `Root cause: ${rootCause || 'Not specified'}\n` +
+    `Known team members: ${knownEmployees.join(', ') || '(none provided)'}\n\n` +
+    'Suggest a focused training intervention to prevent recurrence. Respond ONLY with JSON: ' +
+    '{"topic": "...", "reason": "...", "suggestedEmployees": ["..."], "materialTypes": ["video", "document", "hands-on"]}. ' +
+    'Choose suggestedEmployees from the known team members only (or empty array if none are clearly relevant).';
+
+  const raw = await callAnthropicText(
+    'You are a quality and training expert. You translate root cause findings into focused, actionable training plans. Return only valid JSON.',
+    userContent,
+    600,
+  );
+  try {
+    const parsed = JSON.parse(sliceJSON(raw)) as Partial<TrainingSuggestion>;
+    return {
+      topic: parsed.topic ?? 'Targeted refresher training',
+      reason: parsed.reason ?? 'Recurrence prevention',
+      suggestedEmployees: Array.isArray(parsed.suggestedEmployees)
+        ? parsed.suggestedEmployees.filter((x): x is string => typeof x === 'string')
+        : [],
+      materialTypes: Array.isArray(parsed.materialTypes)
+        ? parsed.materialTypes.filter((x): x is string => typeof x === 'string')
+        : ['document'],
+    };
+  } catch {
+    throw new Error('Could not parse the AI suggestion. Please try again.');
+  }
+}
+
+// Audit-to-NCR enrichment: ask the model for a clean title + severity hint
+// for a single failed audit item, so users can edit polished defaults.
+export interface AuditNCRDraft {
+  title: string;
+  suggestedSeverity: 'Low' | 'Medium' | 'High' | 'Critical';
+  description: string;
+  standardReference: string;
+}
+
+export async function enrichAuditFailureNCR(
+  auditName: string,
+  questionPrompt: string,
+  auditorNote: string,
+  weight: number,
+  standard: string,
+): Promise<AuditNCRDraft> {
+  const userContent =
+    `Audit: ${auditName}\n` +
+    `Standard: ${standard}\n` +
+    `Failed question: ${questionPrompt}\n` +
+    `Auditor note: ${auditorNote || '(none)'}\n` +
+    `Question weight: ${weight} (1-5; higher = more critical)\n\n` +
+    'Produce a clean NCR draft. Respond ONLY with JSON: ' +
+    '{"title": "<=70 chars", "suggestedSeverity": "Low|Medium|High|Critical", "description": "1-2 sentences", "standardReference": "<clause>"}.';
+
+  const raw = await callAnthropicText(
+    'You translate failed audit items into polished, audit-ready NCR drafts. Return only valid JSON.',
+    userContent,
+    600,
+  );
+  try {
+    const parsed = JSON.parse(sliceJSON(raw)) as Partial<AuditNCRDraft>;
+    const sev = parsed.suggestedSeverity;
+    return {
+      title: parsed.title ?? `LPA Finding — ${questionPrompt.slice(0, 60)}`,
+      suggestedSeverity:
+        sev === 'Low' || sev === 'High' || sev === 'Critical' ? sev : 'Medium',
+      description: parsed.description ?? '',
+      standardReference: parsed.standardReference ?? '',
+    };
+  } catch {
+    return {
+      title: `LPA Finding — ${questionPrompt.slice(0, 60)}`,
+      suggestedSeverity: weight >= 4 ? 'High' : 'Medium',
+      description: '',
+      standardReference: '',
+    };
+  }
+}
+
+// AI quiz generation for training records. Returns 5 multiple-choice Qs.
+export interface QuizQuestionDraft {
+  prompt: string;
+  options: string[];
+  correctIndex: number;
+}
+
+export async function generateTrainingQuiz(
+  topic: string,
+  standardRef: string,
+  notes: string,
+): Promise<QuizQuestionDraft[]> {
+  const userContent =
+    `Training topic: ${topic}\n` +
+    `Standard reference: ${standardRef || '(none)'}\n` +
+    `Notes / context: ${notes || '(none)'}\n\n` +
+    'Generate 5 multiple-choice verification questions. Each question has exactly 4 options and ' +
+    'exactly one correct answer. Respond ONLY with a JSON array: ' +
+    '[{"prompt": "...", "options": ["a","b","c","d"], "correctIndex": 0}, ...]';
+
+  const raw = await callAnthropicText(
+    'You are a quality trainer who writes precise comprehension-check questions. Return only valid JSON arrays.',
+    userContent,
+    1200,
+  );
+  try {
+    const parsed = JSON.parse(sliceJSON(raw)) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((q): QuizQuestionDraft | null => {
+        const obj = q as Partial<QuizQuestionDraft>;
+        if (
+          typeof obj.prompt !== 'string' ||
+          !Array.isArray(obj.options) ||
+          obj.options.length !== 4 ||
+          typeof obj.correctIndex !== 'number' ||
+          obj.correctIndex < 0 ||
+          obj.correctIndex > 3
+        ) {
+          return null;
+        }
+        return {
+          prompt: obj.prompt,
+          options: obj.options.filter((o): o is string => typeof o === 'string'),
+          correctIndex: obj.correctIndex,
+        };
+      })
+      .filter((q): q is QuizQuestionDraft => q !== null && q.options.length === 4)
+      .slice(0, 5);
+  } catch {
+    return [];
+  }
+}
+
 // FIX 14 — generate a reusable audit checklist from a short scope
 // description. Available to all tiers as a productivity feature.
 export async function generateAuditTemplateQuestions(

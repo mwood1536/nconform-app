@@ -18,11 +18,18 @@ export type RootStackParamList = {
   UserDirectory: undefined;
   StandardsLibrary: undefined;
   SafetyObservation: undefined;
+  Search: undefined;
+  Pareto: undefined;
+  DepartmentBreakdown: undefined;
+  ManageDepartments: undefined;
+  QuestionBank: undefined;
+  HelpFAQ: undefined;
+  Quiz: { recordId: string };
 };
 
 export type TabParamList = {
   Dashboard: undefined;
-  NCRs: undefined;
+  NCRs: { filterIds?: string[]; filterTitle?: string } | undefined;
   Audits: undefined;
   Training: undefined;
   More: undefined;

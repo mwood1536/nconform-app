@@ -5,6 +5,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { AdBanner } from '../components/AdBanner';
 import { MetricCard } from '../components/MetricCard';
 import { QuickActionButton } from '../components/QuickActionButton';
 import { ScreenHeader } from '../components/ScreenHeader';
@@ -205,6 +206,8 @@ export function AuditsScreen({ navigation }: Props) {
             ))}
           </View>
         )}
+
+        <AdBanner />
       </ScrollView>
     </SafeAreaView>
   );

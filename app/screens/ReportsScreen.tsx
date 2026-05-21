@@ -135,6 +135,34 @@ export function ReportsScreen({ navigation }: Props) {
             fullWidth
           />
         </ReportCard>
+
+        <ReportCard
+          icon="business-outline"
+          title="By Department"
+          description="NCR counts, open vs closed, and severity breakdown per department."
+        >
+          <QuickActionButton
+            label="Open Department Breakdown"
+            variant="primary"
+            icon="bar-chart-outline"
+            onPress={() => navigation.navigate('DepartmentBreakdown')}
+            fullWidth
+          />
+        </ReportCard>
+
+        <ReportCard
+          icon="analytics-outline"
+          title="Pareto Analysis"
+          description="Top recurring root causes ranked with cumulative percentage line."
+        >
+          <QuickActionButton
+            label="Open Pareto Analysis"
+            variant="primary"
+            icon="trending-up-outline"
+            onPress={() => navigation.navigate('Pareto')}
+            fullWidth
+          />
+        </ReportCard>
       </ScrollView>
     </SafeAreaView>
   );

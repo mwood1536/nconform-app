@@ -35,6 +35,7 @@ import { useProfile } from '../hooks/useProfile';
 import { RootStackParamList } from '../navigation/types';
 import { NCRPhoto } from '../types';
 import { StandardSuggestion, suggestStandards } from '../utils/apiHelpers';
+import { allDepartments } from '../utils/departments';
 import { formatDate, nowISO, severityColor } from '../utils/ncrHelpers';
 
 function mapToStandardRef(text: string): StandardReference | null {
@@ -61,7 +62,13 @@ export function LogNCRScreen({ navigation }: Props) {
   const [showDate, setShowDate] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  const [openSheet, setOpenSheet] = useState<'detection' | 'standard' | null>(null);
+  const [department, setDepartment] = useState<string>('');
+  const [departments, setDepartments] = React.useState<string[]>([]);
+  React.useEffect(() => {
+    void allDepartments().then(setDepartments);
+  }, []);
+
+  const [openSheet, setOpenSheet] = useState<'detection' | 'standard' | 'department' | null>(null);
 
   const [suggesting, setSuggesting] = useState(false);
   const [suggestion, setSuggestion] = useState<StandardSuggestion | null>(null);
@@ -156,6 +163,7 @@ export function LogNCRScreen({ navigation }: Props) {
         containmentAction: containmentAction.trim(),
         assignedTo: assignedTo.trim(),
         dueDate: dueDate ? dueDate.toISOString() : '',
+        department: department.trim(),
       });
       navigation.replace('NCRDetail', { ncrId: ncr.id });
     } catch (err) {
@@ -206,6 +214,23 @@ export function LogNCRScreen({ navigation }: Props) {
                 ]}
               >
                 {detectionPoint ?? 'Select where it was found'}
+              </Text>
+              <Ionicons name="chevron-down" size={18} color={Colors.secondaryText} />
+            </Pressable>
+          </FormField>
+
+          <FormField label="Department" hint="Optional — powers the By Department report">
+            <Pressable
+              onPress={() => setOpenSheet('department')}
+              style={({ pressed }) => [styles.input, styles.dropdown, pressed && { opacity: 0.85 }]}
+            >
+              <Text
+                style={[
+                  styles.dropdownText,
+                  !department && { color: Colors.secondaryText },
+                ]}
+              >
+                {department || 'Select department (optional)'}
               </Text>
               <Ionicons name="chevron-down" size={18} color={Colors.secondaryText} />
             </Pressable>
@@ -449,6 +474,14 @@ export function LogNCRScreen({ navigation }: Props) {
         options={StandardReferences}
         selected={standardRef}
         onSelect={(v) => setStandardRef(v)}
+        onClose={() => setOpenSheet(null)}
+      />
+      <OptionSheet
+        visible={openSheet === 'department'}
+        title="Department"
+        options={departments}
+        selected={department || null}
+        onSelect={(v) => setDepartment(v)}
         onClose={() => setOpenSheet(null)}
       />
     </SafeAreaView>

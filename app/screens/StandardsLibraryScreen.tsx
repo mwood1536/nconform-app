@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { Colors, Radii, Shadow, Spacing } from '../constants/colors';
@@ -37,7 +37,10 @@ export function StandardsLibraryScreen({ navigation }: Props) {
                 <View style={styles.codeBadge}>
                   <Text style={styles.codeBadgeText}>{entry.code}</Text>
                 </View>
-                <Text style={styles.cardTitle}>{entry.fullName}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.cardTitle}>{entry.fullName}</Text>
+                  <Text style={styles.cardVersion}>{entry.version}</Text>
+                </View>
                 <Ionicons
                   name={open ? 'chevron-up' : 'chevron-down'}
                   size={18}
@@ -50,9 +53,10 @@ export function StandardsLibraryScreen({ navigation }: Props) {
                   <Text style={styles.sectionLabel}>Overview</Text>
                   <Text style={styles.bodyText}>{entry.description}</Text>
 
-                  <Text style={styles.sectionLabel}>
-                    Key Sections for Nonconformances
-                  </Text>
+                  <Text style={styles.sectionLabel}>Applies To</Text>
+                  <Text style={styles.bodyText}>{entry.appliesTo}</Text>
+
+                  <Text style={styles.sectionLabel}>Key Sections for Nonconformances</Text>
                   {entry.keySections.map((s) => (
                     <View key={s.ref} style={styles.clauseRow}>
                       <Text style={styles.clauseRef}>{s.ref}</Text>
@@ -60,8 +64,42 @@ export function StandardsLibraryScreen({ navigation }: Props) {
                     </View>
                   ))}
 
+                  <Text style={styles.sectionLabel}>Common Audit Findings</Text>
+                  {entry.commonFindings.map((f) => (
+                    <View key={f} style={styles.bulletRow}>
+                      <Ionicons
+                        name="ellipse"
+                        size={6}
+                        color={Colors.steelBlue}
+                        style={{ marginTop: 7 }}
+                      />
+                      <Text style={styles.bulletText}>{f}</Text>
+                    </View>
+                  ))}
+
+                  <Text style={styles.sectionLabel}>Example NCR Scenarios</Text>
+                  {entry.exampleScenarios.map((s) => (
+                    <View key={s} style={styles.bulletRow}>
+                      <Ionicons
+                        name="ellipse"
+                        size={6}
+                        color={Colors.amber}
+                        style={{ marginTop: 7 }}
+                      />
+                      <Text style={styles.bulletText}>{s}</Text>
+                    </View>
+                  ))}
+
                   <Text style={styles.sectionLabel}>When to Reference</Text>
                   <Text style={styles.bodyText}>{entry.whenToReference}</Text>
+
+                  <Pressable
+                    onPress={() => Linking.openURL(entry.externalLink).catch(() => undefined)}
+                    style={({ pressed }) => [styles.linkRow, pressed && { opacity: 0.85 }]}
+                  >
+                    <Ionicons name="open-outline" size={14} color={Colors.steelBlue} />
+                    <Text style={styles.linkText}>Open official source</Text>
+                  </Pressable>
                 </View>
               ) : null}
             </View>
@@ -119,10 +157,14 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
   },
   cardTitle: {
-    flex: 1,
     fontSize: 14,
     fontWeight: '700',
     color: Colors.navy,
+  },
+  cardVersion: {
+    fontSize: 11,
+    color: Colors.secondaryText,
+    marginTop: 2,
   },
   cardBody: {
     paddingHorizontal: Spacing.lg,
@@ -152,13 +194,36 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: Colors.steelBlue,
-    minWidth: 96,
+    minWidth: 110,
   },
   clauseTitle: {
     flex: 1,
     fontSize: 13,
     color: Colors.bodyText,
     lineHeight: 18,
+  },
+  bulletRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.sm,
+    paddingVertical: 2,
+  },
+  bulletText: {
+    flex: 1,
+    fontSize: 13,
+    color: Colors.bodyText,
+    lineHeight: 18,
+  },
+  linkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: Spacing.md,
+  },
+  linkText: {
+    fontSize: 13,
+    color: Colors.steelBlue,
+    fontWeight: '700',
   },
   disclaimer: {
     fontSize: 12,

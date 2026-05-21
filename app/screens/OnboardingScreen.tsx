@@ -27,6 +27,7 @@ import { useProfile } from '../hooks/useProfile';
 import { RootStackParamList } from '../navigation/types';
 import { UserProfile } from '../types';
 import { nowISO } from '../utils/ncrHelpers';
+import { loadSampleData } from '../utils/sampleData';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Onboarding'>;
 
@@ -55,7 +56,7 @@ export function OnboardingScreen({ navigation }: Props) {
   const goNext = () => setStep((s) => Math.min(s + 1, TOTAL_STEPS - 1));
   const goBack = () => setStep((s) => Math.max(s - 1, 0));
 
-  const completeOnboarding = async () => {
+  const completeOnboarding = async (withDemo: boolean) => {
     setSubmitting(true);
     try {
       const profile: UserProfile = {
@@ -73,6 +74,13 @@ export function OnboardingScreen({ navigation }: Props) {
         onboardedAt: nowISO(),
       };
       await save(profile);
+      if (withDemo) {
+        try {
+          await loadSampleData();
+        } catch {
+          // Demo data is best-effort — never block onboarding completion.
+        }
+      }
       navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
     } finally {
       setSubmitting(false);
@@ -181,9 +189,17 @@ export function OnboardingScreen({ navigation }: Props) {
 
             <View style={styles.finalFooter}>
               <QuickActionButton
-                label={submitting ? 'Setting up…' : "Let's Get Started"}
+                label={submitting ? 'Setting up…' : 'Start with Demo Data'}
                 variant="amber"
-                onPress={completeOnboarding}
+                onPress={() => completeOnboarding(true)}
+                disabled={submitting}
+                fullWidth
+                icon="sparkles"
+              />
+              <QuickActionButton
+                label={submitting ? 'Setting up…' : 'Start Fresh'}
+                variant="outline"
+                onPress={() => completeOnboarding(false)}
                 disabled={submitting}
                 fullWidth
                 icon="arrow-forward"

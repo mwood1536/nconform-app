@@ -3,7 +3,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { CompositeScreenProps } from '@react-navigation/native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -13,6 +13,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AdBanner } from '../components/AdBanner';
+import { ChartFrame, ComparisonCard, MiniBarChart, MiniLineChart } from '../components/MiniCharts';
+import { PatternsSection } from '../components/PatternsSection';
+import { TutorialOverlay } from '../components/TutorialOverlay';
+import { UpsellCard } from '../components/UpsellCard';
+import { Storage } from '../utils/storage';
 import { IronStratosWordmark } from '../components/IronStratosWordmark';
 import { NetworkStatusIcon } from '../components/NetworkStatusIcon';
 import { MetricCard } from '../components/MetricCard';
@@ -25,6 +30,12 @@ import { useProfile } from '../hooks/useProfile';
 import { RootStackParamList, TabParamList } from '../navigation/types';
 import { greetingFor, isOverdue } from '../utils/ncrHelpers';
 import { adsEnabled } from '../utils/subscription';
+import {
+  activityAgeDays,
+  ncrCountByWeek,
+  openActionsTrend,
+  passRateByWeek,
+} from '../utils/trends';
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<TabParamList, 'Dashboard'>,
@@ -35,6 +46,13 @@ export function DashboardScreen({ navigation }: Props) {
   const { profile } = useProfile();
   const { ncrs, reload } = useNCRs();
   const { audits, reload: reloadAudits } = useAudits();
+  const [showTutorial, setShowTutorial] = useState(false);
+
+  useEffect(() => {
+    void Storage.getTutorialCompleted().then((done) => {
+      if (!done) setShowTutorial(true);
+    });
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -76,6 +94,14 @@ export function DashboardScreen({ navigation }: Props) {
         </View>
         <View style={styles.headerActions}>
           <NetworkStatusIcon />
+          <Pressable
+            onPress={() => navigation.navigate('Search')}
+            style={({ pressed }) => [styles.settingsBtn, pressed && { opacity: 0.7 }]}
+            hitSlop={8}
+            accessibilityLabel="Search"
+          >
+            <Ionicons name="search-outline" size={22} color={Colors.navy} />
+          </Pressable>
           <Pressable
             onPress={() => navigation.navigate('Settings')}
             style={({ pressed }) => [styles.settingsBtn, pressed && { opacity: 0.7 }]}
@@ -119,6 +145,61 @@ export function DashboardScreen({ navigation }: Props) {
             />
           </View>
         </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Trends</Text>
+          <View style={styles.trendGrid}>
+            <ChartFrame
+              title="NCRs Last 30 Days"
+              subtitle="by week"
+              hasData={ncrs.length > 0}
+            >
+              {(() => {
+                const data = ncrCountByWeek(ncrs, 4);
+                return <MiniBarChart values={data.values} labels={data.labels} />;
+              })()}
+            </ChartFrame>
+            <ChartFrame
+              title="Audit Pass Rate"
+              subtitle="last 12 weeks"
+              hasData={audits.filter((a) => a.status === 'Completed').length >= 2}
+            >
+              {(() => {
+                const data = passRateByWeek(audits, 12);
+                return <MiniLineChart values={data.values} yMax={100} />;
+              })()}
+            </ChartFrame>
+            <ChartFrame
+              title="Open Actions"
+              hasData={ncrs.length > 0 && activityAgeDays(ncrs) >= 1}
+            >
+              {(() => {
+                const t = openActionsTrend(ncrs);
+                return (
+                  <ComparisonCard
+                    current={t.current}
+                    previous={t.previous}
+                    label="across all NCRs"
+                  />
+                );
+              })()}
+            </ChartFrame>
+          </View>
+        </View>
+
+        <PatternsSection
+          ncrs={ncrs}
+          audits={audits}
+          onSelectPattern={(p) =>
+            navigation.navigate('Main', {
+              screen: 'NCRs',
+              params: {
+                filterIds: p.relatedNcrIds,
+                filterTitle: p.title,
+              },
+            })
+          }
+        />
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
@@ -185,15 +266,21 @@ export function DashboardScreen({ navigation }: Props) {
           </View>
         </View>
 
-        <AdBanner
+        <UpsellCard
           visible={isFreeTier}
           onUpgrade={() => navigation.navigate('Settings')}
         />
+        <AdBanner />
 
         <View style={styles.footerWordmark}>
           <IronStratosWordmark size="sm" />
         </View>
       </ScrollView>
+
+      <TutorialOverlay
+        visible={showTutorial}
+        onDone={() => setShowTutorial(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -293,6 +380,9 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   recentList: {
+    gap: Spacing.md,
+  },
+  trendGrid: {
     gap: Spacing.md,
   },
   quickActions: {

@@ -23,7 +23,14 @@ export function NCRCard({ ncr, onPress, compact = false }: Props) {
       style={({ pressed }) => [styles.card, pressed && { opacity: 0.9 }]}
     >
       <View style={styles.headerRow}>
-        <Text style={styles.ncrNumber}>{ncr.ncrNumber}</Text>
+        <View style={styles.numberRow}>
+          <Text style={styles.ncrNumber}>{ncr.ncrNumber}</Text>
+          {ncr.isSampleData ? (
+            <View style={styles.demoBadge}>
+              <Text style={styles.demoBadgeText}>DEMO</Text>
+            </View>
+          ) : null}
+        </View>
         <StatusBadge status={overdue ? 'Overdue' : ncr.status} small />
       </View>
       <Text style={styles.title} numberOfLines={2}>
@@ -114,5 +121,22 @@ const styles = StyleSheet.create({
   ageText: {
     fontSize: 12,
     fontWeight: '600',
+  },
+  numberRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  demoBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: Radii.pill,
+    backgroundColor: Colors.amber,
+  },
+  demoBadgeText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: Colors.card,
+    letterSpacing: 0.6,
   },
 });
