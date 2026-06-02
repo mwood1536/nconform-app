@@ -15,14 +15,14 @@ interface AnthropicMessageResponse {
   content: AnthropicTextBlock[];
 }
 
+// All AI requests are routed exclusively through the IronStratos proxy
+// (rootcauseai-proxy) configured via EXPO_PUBLIC_PROXY_URL. The proxy injects
+// the Anthropic API key server-side. We never ship an API key in the app or
+// call api.anthropic.com directly — EXPO_PUBLIC_* vars are bundled into the
+// shipped APK and would be extractable by anyone.
 function getProxyUrl(): string | null {
   const url = process.env.EXPO_PUBLIC_PROXY_URL;
   return url && url.length > 0 ? url : null;
-}
-
-function getDirectKey(): string | null {
-  const key = process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY;
-  return key && key.length > 0 ? key : null;
 }
 
 function buildUserPrompt(ncr: NCR, profileStandard: string): string {
@@ -69,30 +69,24 @@ export async function generateCorrectiveAction(
 ): Promise<AIcorrectiveActionResponse> {
   await ensureOnlineForAI();
   const proxyUrl = getProxyUrl();
-  const directKey = getDirectKey();
   const userPrompt = buildUserPrompt(ncr, profileStandard);
 
-  if (!proxyUrl && !directKey) {
+  if (!proxyUrl) {
     if (__DEV__) {
-      console.warn('[apiHelpers] No EXPO_PUBLIC_PROXY_URL or EXPO_PUBLIC_ANTHROPIC_API_KEY configured.');
+      console.warn('[apiHelpers] No EXPO_PUBLIC_PROXY_URL configured.');
     }
     throw new Error(
       'AI corrective action service is not configured. Please contact your administrator.',
     );
   }
 
-  const endpoint = proxyUrl ?? 'https://api.anthropic.com/v1/messages';
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
-  if (!proxyUrl && directKey) {
-    headers['x-api-key'] = directKey;
-    headers['anthropic-version'] = '2023-06-01';
-  }
 
   let response: Response;
   try {
-    response = await fetch(endpoint, {
+    response = await fetch(proxyUrl, {
       method: 'POST',
       headers,
       body: JSON.stringify({
@@ -146,17 +140,11 @@ async function callAnthropicText(
 ): Promise<string> {
   await ensureOnlineForAI();
   const proxyUrl = getProxyUrl();
-  const directKey = getDirectKey();
-  if (!proxyUrl && !directKey) {
+  if (!proxyUrl) {
     throw new Error('AI service is not configured.');
   }
-  const endpoint = proxyUrl ?? 'https://api.anthropic.com/v1/messages';
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (!proxyUrl && directKey) {
-    headers['x-api-key'] = directKey;
-    headers['anthropic-version'] = '2023-06-01';
-  }
-  const response = await fetch(endpoint, {
+  const response = await fetch(proxyUrl, {
     method: 'POST',
     headers,
     body: JSON.stringify({
@@ -240,8 +228,7 @@ export async function generateOnePagerSummary(
 ): Promise<string> {
   await ensureOnlineForAI();
   const proxyUrl = getProxyUrl();
-  const directKey = getDirectKey();
-  if (!proxyUrl && !directKey) {
+  if (!proxyUrl) {
     return [
       `${ncr.ncrNumber} — ${ncr.title}`,
       `Severity: ${ncr.severity}`,
@@ -255,14 +242,9 @@ export async function generateOnePagerSummary(
       .join('\n');
   }
 
-  const endpoint = proxyUrl ?? 'https://api.anthropic.com/v1/messages';
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (!proxyUrl && directKey) {
-    headers['x-api-key'] = directKey;
-    headers['anthropic-version'] = '2023-06-01';
-  }
 
-  const response = await fetch(endpoint, {
+  const response = await fetch(proxyUrl, {
     method: 'POST',
     headers,
     body: JSON.stringify({

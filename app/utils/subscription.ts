@@ -21,8 +21,8 @@ export const Pricing = {
 } as const;
 
 export const EnterpriseURL = 'https://ironstratos.com/enterprise';
-export const PrivacyURL = 'https://ironstratos.com/privacy';
-export const TermsURL = 'https://ironstratos.com/terms';
+export const PrivacyURL = 'https://ironstratos.com/nconform/privacy';
+export const TermsURL = 'https://ironstratos.com/nconform/terms';
 
 export function tierLabel(tier: SubscriptionTier): string {
   switch (tier) {
