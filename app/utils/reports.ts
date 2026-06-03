@@ -22,7 +22,7 @@ const baseStyles = `
   .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; }
   .sev-Low { background: #6B72801A; color: #6B7280; }
   .sev-Medium { background: #D4A0171A; color: #D4A017; }
-  .sev-High { background: #D4821A1A; color: #D4821A; }
+  .sev-High { background: #F59E0B1A; color: #F59E0B; }
   .sev-Critical { background: #C0392B1A; color: #C0392B; }
   .footer { margin-top: 36px; font-size: 10px; color: #6B7280; letter-spacing: 1.4px; text-transform: uppercase; }
 `;
