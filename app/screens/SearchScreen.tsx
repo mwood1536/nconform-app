@@ -14,7 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { Colors, Radii, Shadow, Spacing } from '../constants/colors';
-import { StandardsLibrary } from '../constants/standardsLibrary';
+import { StandardsLibrary } from '../core/StandardsLibrary';
 import { useAudits } from '../hooks/useAudits';
 import { useNCRs } from '../hooks/useNCRs';
 import { useTraining } from '../hooks/useTraining';
