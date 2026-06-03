@@ -22,7 +22,7 @@ import { useProfile } from '../hooks/useProfile';
 import { useTeamDirectory } from '../hooks/useTeamDirectory';
 import { RootStackParamList } from '../navigation/types';
 import { generateId } from '../utils/ncrHelpers';
-import { isBundle } from '../utils/subscription';
+import { entitlements } from '../core/EntitlementService';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'UserDirectory'>;
 
@@ -63,7 +63,7 @@ export function UserDirectoryScreen({ navigation }: Props) {
     ]);
   };
 
-  if (!isBundle(profile)) {
+  if (!entitlements.isBundleSync()) {
     return (
       <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
         <ScreenHeader title="User Directory" onBack={() => navigation.goBack()} />

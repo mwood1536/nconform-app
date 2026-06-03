@@ -23,7 +23,7 @@ import { useProfile } from '../hooks/useProfile';
 import { RootStackParamList } from '../navigation/types';
 import { SafetyObservation } from '../types';
 import { formatDate, generateId, nowISO } from '../utils/ncrHelpers';
-import { isBundle } from '../utils/subscription';
+import { entitlements } from '../core/EntitlementService';
 import { Storage } from '../utils/storage';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SafetyObservation'>;
@@ -36,7 +36,7 @@ export function SafetyObservationScreen({ navigation }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [history, setHistory] = useState<SafetyObservation[]>([]);
 
-  const teamLinked = isBundle(profile);
+  const teamLinked = entitlements.isBundleSync();
 
   useEffect(() => {
     void Storage.getSafetyObservations().then((list) => {

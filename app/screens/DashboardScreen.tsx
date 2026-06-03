@@ -29,7 +29,7 @@ import { useNCRs } from '../hooks/useNCRs';
 import { useProfile } from '../hooks/useProfile';
 import { RootStackParamList, TabParamList } from '../navigation/types';
 import { greetingFor, isOverdue } from '../utils/ncrHelpers';
-import { adsEnabled } from '../utils/subscription';
+import { entitlements } from '../core/EntitlementService';
 import {
   activityAgeDays,
   ncrCountByWeek,
@@ -83,7 +83,7 @@ export function DashboardScreen({ navigation }: Props) {
   const greeting = greetingFor();
   const namePart = profile?.name ? `, ${profile.name}` : '';
 
-  const isFreeTier = adsEnabled(profile);
+  const isFreeTier = entitlements.adsEnabled();
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>

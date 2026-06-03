@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { UserProfile } from '../types';
 import { Storage } from '../utils/storage';
+import { entitlements } from '../core/EntitlementService';
+
+// Keep the centralized EntitlementService cache in lock-step with the live
+// profile, so entitlements.*Sync() returns the same answer as the prior
+// pure-helper-on-profile calls everywhere.
+function syncEntitlements(profile: UserProfile | null): void {
+  (entitlements as { setProfileSnapshot: (p: UserProfile | null) => void }).setProfileSnapshot(profile);
+}
 
 interface UseProfileResult {
   profile: UserProfile | null;
@@ -19,6 +27,7 @@ export function useProfile(): UseProfileResult {
     setLoading(true);
     try {
       const next = await Storage.getProfile();
+      syncEntitlements(next);
       setProfile(next);
     } finally {
       setLoading(false);
@@ -27,6 +36,7 @@ export function useProfile(): UseProfileResult {
 
   const save = useCallback(async (next: UserProfile) => {
     await Storage.setProfile(next);
+    syncEntitlements(next);
     setProfile(next);
   }, []);
 
@@ -36,6 +46,7 @@ export function useProfile(): UseProfileResult {
       if (!current) return;
       const merged: UserProfile = { ...current, ...patch };
       await Storage.setProfile(merged);
+      syncEntitlements(merged);
       setProfile(merged);
     },
     [profile],
@@ -43,6 +54,7 @@ export function useProfile(): UseProfileResult {
 
   const reset = useCallback(async () => {
     await Storage.clearProfile();
+    syncEntitlements(null);
     setProfile(null);
   }, []);
 

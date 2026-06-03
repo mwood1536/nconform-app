@@ -3,8 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import { Colors, Spacing } from '../constants/colors';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
-import { useProfile } from '../hooks/useProfile';
-import { adsEnabled } from '../utils/subscription';
+import { entitlements } from '../core/EntitlementService';
 
 // AdMob banner using react-native-google-mobile-ads. The module is loaded
 // lazily and only when running outside Expo Go, where the native module
@@ -52,16 +51,20 @@ function loadAdsModule(): RNGMABanner | null {
 }
 
 export function AdBanner() {
-  const { profile } = useProfile();
   const { isOnline } = useNetworkStatus();
   const [adsModule, setAdsModule] = useState<RNGMABanner | null>(null);
   const [failed, setFailed] = useState(false);
+  // Ad gate centralized in EntitlementService (ads on free only). Behavior
+  // unchanged from adsEnabled(profile); the cache mirrors the live profile.
+  const [adsOn, setAdsOn] = useState(entitlements.adsEnabled());
 
   useEffect(() => {
     setAdsModule(loadAdsModule());
+    const unsub = entitlements.subscribe(() => setAdsOn(entitlements.adsEnabled()));
+    return unsub;
   }, []);
 
-  if (!adsEnabled(profile)) return null;
+  if (!adsOn) return null;
   if (!isOnline) return null;
   if (!adsModule) return null;
   if (failed) return null;

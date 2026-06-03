@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { syncEngine } from '../core/SyncEngine';
 import {
   Action,
   Audit,
@@ -74,8 +75,15 @@ async function readJSON<T>(key: string, fallback: T): Promise<T> {
   }
 }
 
+// All local writes flow through the SyncEngine: it persists to AsyncStorage
+// first (offline-first source of truth) then queues a pending outbox entry.
+// NConform's store writes whole collections, so the outbox unit is the
+// collection key (op 'update').
 async function writeJSON<T>(key: string, value: T): Promise<void> {
-  await AsyncStorage.setItem(key, JSON.stringify(value));
+  await syncEngine.write(
+    { entity: key, op: 'update', id: key, payload: value },
+    () => AsyncStorage.setItem(key, JSON.stringify(value)),
+  );
 }
 
 function normalizeRole(value: unknown): UserRole {
@@ -228,7 +236,10 @@ export const Storage = {
     await writeJSON(StorageKeys.userProfile, profile);
   },
   async clearProfile(): Promise<void> {
-    await AsyncStorage.removeItem(StorageKeys.userProfile);
+    await syncEngine.write(
+      { entity: StorageKeys.userProfile, op: 'delete', id: StorageKeys.userProfile },
+      () => AsyncStorage.removeItem(StorageKeys.userProfile),
+    );
   },
 
   async getNCRs(): Promise<NCR[]> {
@@ -332,7 +343,10 @@ export const Storage = {
     await writeJSON(StorageKeys.patternsDetected, cache);
   },
   async clearPatternsCache(): Promise<void> {
-    await AsyncStorage.removeItem(StorageKeys.patternsDetected);
+    await syncEngine.write(
+      { entity: StorageKeys.patternsDetected, op: 'delete', id: StorageKeys.patternsDetected },
+      () => AsyncStorage.removeItem(StorageKeys.patternsDetected),
+    );
   },
 
   async getCustomDepartments(): Promise<string[]> {
@@ -371,7 +385,9 @@ export const Storage = {
   },
 
   async resetAll(): Promise<void> {
-    await AsyncStorage.multiRemove([
+    await syncEngine.write(
+      { entity: 'all', op: 'delete', id: 'all' },
+      () => AsyncStorage.multiRemove([
       StorageKeys.userProfile,
       StorageKeys.ncrs,
       StorageKeys.correctiveActions,
@@ -391,6 +407,7 @@ export const Storage = {
       StorageKeys.recentSearches,
       StorageKeys.tutorialCompleted,
       StorageKeys.demoDataLoaded,
-    ]);
+      ]),
+    );
   },
 };

@@ -38,13 +38,13 @@ import {
 } from '../utils/storage';
 import {
   EnterpriseURL,
-  isBundle,
   Pricing,
   PrivacyURL,
   TermsURL,
   tierColor,
   tierLabel,
 } from '../utils/subscription';
+import { entitlements } from '../core/EntitlementService';
 import { effectiveTrainingStatus, expiringBuckets } from '../utils/training';
 import { roleDescription, roleLabel, RoleOptions } from '../utils/permissions';
 import { loadSampleData, removeSampleData } from '../utils/sampleData';
@@ -400,7 +400,7 @@ export function SettingsScreen({ navigation }: Props) {
           </Pressable>
         </SectionCard>
 
-        {isBundle(profile) ? (
+        {entitlements.isBundleSync() ? (
           <SectionCard title="Root Cause AI Connection">
             <View style={styles.tierRow}>
               <Text style={styles.tierLabel}>Status</Text>
