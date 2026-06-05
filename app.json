@@ -43,7 +43,8 @@
           "iosAppId": "ca-app-pub-3940256099942544~1458002511",
           "userTrackingUsageDescription": "This identifier will be used to deliver personalized ads to you. NConform Pro removes ads entirely."
         }
-      ]
+      ],
+      "expo-font"
     ],
     "extra": {
       "eas": {
