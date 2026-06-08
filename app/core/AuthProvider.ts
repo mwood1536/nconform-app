@@ -1,22 +1,29 @@
 // AuthProvider — single identity surface for the app.
 //
-// Contract is identical across Root Cause AI and NConform. The local
-// implementation today is an anonymous, on-device identity (no account, no
-// network), matching current behavior where identity is just a local profile.
+// Contract is identical across Root Cause AI and NConform. This implementation
+// is Supabase-backed:
+//   * The app's default identity stays ANONYMOUS / on-device — free tier never
+//     has to sign in, exactly like before. currentUser() is always non-null.
+//   * signIn('google' | 'apple') runs a REAL Supabase OAuth flow (opt-in, only
+//     when a user chooses cloud / Bundle). On success the cloud identity
+//     replaces the anonymous one; sessions persist across launches.
+//   * signOut() ends the cloud session and falls back to the anonymous
+//     identity, so the app keeps working locally.
 //
-// DEFERRED NEXT STEP: replace LocalAuthProvider with a Supabase-backed
-// implementation that performs Google + Apple OAuth and yields ONE identity
-// shared across both apps. Call sites already depend only on this interface,
-// so that swap requires no screen changes.
+// The public interface below is unchanged from the previous local stub, so no
+// call site needs to change.
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Linking } from 'react-native';
+import type { Session } from '@supabase/supabase-js';
 import { AppId, APP_ID } from './types';
+import { supabase, isSupabaseConfigured } from './supabaseClient';
 
 export type AuthState = 'loading' | 'signed_in' | 'signed_out';
 export type AuthProviderId = 'anonymous' | 'google' | 'apple';
 
 export interface AuthUser {
-  /** Stable id. Anonymous/local today; Supabase user id once OAuth lands. */
+  /** Stable id. Anonymous/local by default; Supabase user id once signed in. */
   id: string;
   provider: AuthProviderId;
   email: string | null;
@@ -31,7 +38,7 @@ export interface AuthSnapshot {
 
 export interface AuthProvider {
   readonly app: AppId;
-  /** Sign in. provider selects Google/Apple later; anonymous is the default. */
+  /** Sign in. 'google'/'apple' run real OAuth; 'anonymous' is the default. */
   signIn(provider?: AuthProviderId): Promise<AuthUser>;
   signOut(): Promise<void>;
   currentUser(): AuthUser | null;
@@ -40,8 +47,17 @@ export interface AuthProvider {
 }
 
 const ANON_ID_KEY = 'ironstratos_auth_anon_id';
+// App URL scheme used as the OAuth redirect target. APP_ID matches the scheme
+// declared in each app's app.json ('rootcauseai' / 'nconform').
+const APP_SCHEME = APP_ID;
 
-class LocalAuthProvider implements AuthProvider {
+function providerFromSession(session: Session): AuthProviderId {
+  const p = session.user.app_metadata?.provider;
+  if (p === 'apple') return 'apple';
+  return 'google';
+}
+
+class SupabaseAuthProvider implements AuthProvider {
   readonly app: AppId = APP_ID;
   private state: AuthState = 'loading';
   private user: AuthUser | null = null;
@@ -52,6 +68,28 @@ class LocalAuthProvider implements AuthProvider {
   }
 
   private async init(): Promise<void> {
+    // Always establish the anonymous local identity first so the app is usable
+    // immediately and offline, regardless of cloud state.
+    await this.ensureAnonymous();
+
+    if (supabase) {
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (data.session) {
+          this.applySession(data.session);
+        }
+        // Stay in sync with token refresh and external sign-out.
+        supabase.auth.onAuthStateChange((_event, session) => {
+          if (session) this.applySession(session);
+          else void this.ensureAnonymous();
+        });
+      } catch (e) {
+        console.log('[AuthProvider] session restore failed', e);
+      }
+    }
+  }
+
+  private async ensureAnonymous(): Promise<void> {
     try {
       let id = await AsyncStorage.getItem(ANON_ID_KEY);
       if (!id) {
@@ -62,6 +100,23 @@ class LocalAuthProvider implements AuthProvider {
     } catch {
       this.user = { id: 'anon-local', provider: 'anonymous', email: null, displayName: null, isAnonymous: true };
     }
+    this.state = 'signed_in';
+    this.notify();
+  }
+
+  private applySession(session: Session): void {
+    const u = session.user;
+    const displayName =
+      (u.user_metadata?.full_name as string | undefined) ??
+      (u.user_metadata?.name as string | undefined) ??
+      null;
+    this.user = {
+      id: u.id,
+      provider: providerFromSession(session),
+      email: u.email ?? null,
+      displayName,
+      isAnonymous: false,
+    };
     this.state = 'signed_in';
     this.notify();
   }
@@ -77,25 +132,84 @@ class LocalAuthProvider implements AuthProvider {
     });
   }
 
-  async signIn(provider: AuthProviderId = 'anonymous'): Promise<AuthUser> {
-    // Local stub: real Google/Apple OAuth (via Supabase) is a deferred step.
-    // Returns the persistent anonymous identity so callers can integrate now.
-    if (provider !== 'anonymous') {
-      console.log(`[AuthProvider] ${provider} OAuth not wired yet — using anonymous identity (stub).`);
+  /** Open the provider's consent page and resolve with the auth code captured
+   *  from the deep-link redirect back into the app. */
+  private openAndAwaitCode(authUrl: string, redirectTo: string): Promise<string> {
+    return new Promise<string>((resolve, reject) => {
+      let settled = false;
+      const finish = (fn: () => void) => {
+        if (settled) return;
+        settled = true;
+        sub.remove();
+        fn();
+      };
+      const sub = Linking.addEventListener('url', ({ url }) => {
+        if (!url.startsWith(redirectTo)) return;
+        let code: string | null = null;
+        try {
+          code = new URL(url).searchParams.get('code');
+        } catch {
+          code = null;
+        }
+        finish(() =>
+          code ? resolve(code) : reject(new Error('No authorization code in redirect.')),
+        );
+      });
+      Linking.openURL(authUrl).catch((e) =>
+        finish(() => reject(e instanceof Error ? e : new Error(String(e)))),
+      );
+    });
+  }
+
+  private async oauthSignIn(provider: 'google' | 'apple'): Promise<AuthUser> {
+    if (!supabase) {
+      throw new Error('Cloud sign-in is unavailable: Supabase is not configured.');
     }
-    if (!this.user) {
-      await this.init();
-    } else {
-      this.state = 'signed_in';
-      this.notify();
+    const redirectTo = `${APP_SCHEME}://auth-callback`;
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo, skipBrowserRedirect: true },
+    });
+    if (error || !data?.url) {
+      throw error ?? new Error('Could not start sign-in.');
     }
+
+    const code = await this.openAndAwaitCode(data.url, redirectTo);
+    const { data: exchanged, error: exchangeErr } =
+      await supabase.auth.exchangeCodeForSession(code);
+    if (exchangeErr || !exchanged.session) {
+      throw exchangeErr ?? new Error('Sign-in did not complete.');
+    }
+
+    this.applySession(exchanged.session);
     return this.user as AuthUser;
   }
 
+  async signIn(provider: AuthProviderId = 'anonymous'): Promise<AuthUser> {
+    if (provider === 'anonymous') {
+      await this.ensureAnonymous();
+      return this.user as AuthUser;
+    }
+    if (!isSupabaseConfigured) {
+      console.log(
+        `[AuthProvider] ${provider} sign-in requested but Supabase is not configured — staying anonymous.`,
+      );
+      await this.ensureAnonymous();
+      return this.user as AuthUser;
+    }
+    return this.oauthSignIn(provider);
+  }
+
   async signOut(): Promise<void> {
-    this.state = 'signed_out';
-    this.user = null;
-    this.notify();
+    if (supabase) {
+      try {
+        await supabase.auth.signOut();
+      } catch (e) {
+        console.log('[AuthProvider] signOut error', e);
+      }
+    }
+    // Free tier stays local: drop back to the anonymous on-device identity.
+    await this.ensureAnonymous();
   }
 
   currentUser(): AuthUser | null {
@@ -115,4 +229,4 @@ class LocalAuthProvider implements AuthProvider {
   }
 }
 
-export const authProvider: AuthProvider = new LocalAuthProvider();
+export const authProvider: AuthProvider = new SupabaseAuthProvider();
