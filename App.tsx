@@ -7,6 +7,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppNavigator } from './app/navigation/AppNavigator';
 import { Colors } from './app/constants/colors';
 import { configureNotificationHandler } from './app/utils/notifications';
+import { installSyncTriggers } from './app/core/sync/triggers';
 
 // Boot AdMob outside Expo Go (where the native module is absent). Wrapped in
 // require so dev clients without the package still launch.
@@ -33,6 +34,10 @@ export default function App() {
       NavigationBar.setBackgroundColorAsync(Colors.background).catch(() => undefined);
       NavigationBar.setButtonStyleAsync('dark').catch(() => undefined);
     }
+    // Install cloud-sync flush triggers (foreground / sign-in / post-write).
+    // No-op for free/anonymous users — runFlush gates on identity + key.
+    const removeSyncTriggers = installSyncTriggers();
+    return removeSyncTriggers;
   }, []);
 
   return (

@@ -45,7 +45,8 @@
           "userTrackingUsageDescription": "This identifier will be used to deliver personalized ads to you. NConform Pro removes ads entirely."
         }
       ],
-      "expo-font"
+      "expo-font",
+      "expo-secure-store"
     ],
     "extra": {
       "eas": {
