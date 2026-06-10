@@ -20,7 +20,7 @@ export const Pricing = {
   },
 } as const;
 
-export const EnterpriseURL = 'https://ironstratos.com/enterprise';
+export const EnterpriseURL = 'https://ironstratos.com';
 export const PrivacyURL = 'https://ironstratos.com/nconform/privacy';
 export const TermsURL = 'https://ironstratos.com/nconform/terms';
 
