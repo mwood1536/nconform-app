@@ -9,19 +9,16 @@
 
 import { AppState, type AppStateStatus } from 'react-native';
 import { authProvider, type AuthSnapshot } from '../AuthProvider';
-import { supabase } from '../supabaseClient';
 import { syncEngine } from '../SyncEngine';
-import { provisionIngestKey, clearIngestApiKey } from './keyStore';
+import { ensureIngestKeyProvisioned, clearIngestApiKey } from './keyStore';
 
 const INGEST_APP = 'nconform' as const;
 
 async function onSignedIn(): Promise<void> {
   try {
-    if (supabase) {
-      const { data } = await supabase.auth.getSession();
-      const token = data.session?.access_token;
-      if (token) await provisionIngestKey(token, INGEST_APP);
-    }
+    // Deduped with the sign-in UI's provision call (single in-flight) so a
+    // sign-in never rotates the key twice.
+    await ensureIngestKeyProvisioned(INGEST_APP);
   } catch (e) {
     console.log('[syncTriggers] provision error', e);
   }

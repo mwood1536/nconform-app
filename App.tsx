@@ -8,6 +8,7 @@ import { AppNavigator } from './app/navigation/AppNavigator';
 import { Colors } from './app/constants/colors';
 import { configureNotificationHandler } from './app/utils/notifications';
 import { installSyncTriggers } from './app/core/sync/triggers';
+import { AuthGate } from './app/components/auth-gate';
 
 // Boot AdMob outside Expo Go (where the native module is absent). Wrapped in
 // require so dev clients without the package still launch.
@@ -43,7 +44,11 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <StatusBar style="dark" backgroundColor={Colors.background} />
-      <AppNavigator />
+      {/* Mandatory sign-in gate — the app body renders only for a signed-in
+          user with a provisioned ingest key (see app/components/auth-gate.tsx). */}
+      <AuthGate>
+        <AppNavigator />
+      </AuthGate>
     </SafeAreaProvider>
   );
 }

@@ -6,8 +6,11 @@
 
 import * as SecureStore from 'expo-secure-store';
 import { INGEST_BASE_URL } from './config';
+import { supabase } from '../supabaseClient';
 
 const INGEST_KEY_SLOT = 'ironstratos_ingest_api_key';
+
+export type IngestAppId = 'root_cause_ai' | 'nconform';
 
 export async function getIngestApiKey(): Promise<string | null> {
   try {
@@ -46,7 +49,7 @@ export async function clearIngestApiKey(): Promise<void> {
  */
 export async function provisionIngestKey(
   supabaseAccessToken: string,
-  app: 'root_cause_ai' | 'nconform',
+  app: IngestAppId,
 ): Promise<boolean> {
   try {
     const res = await fetch(`${INGEST_BASE_URL}/api/keys/provision`, {
@@ -67,4 +70,37 @@ export async function provisionIngestKey(
     console.log('[keyStore] provision error', e);
     return false;
   }
+}
+
+// Single, concurrency-safe entry point for provisioning. Both the sign-in UI
+// (hooks/use-cloud-account) and the auth trigger (core/sync/triggers.ts) call
+// this on a sign-in, so it MUST NOT provision twice: the server rotates the key
+// on every provision (revoke old + mint new — see provisionMobileKey), so a
+// double call would leave one device holding a key the server has revoked.
+//
+// Guarantees:
+//   * If a key already exists in secure-store, it is kept (we clear it on
+//     sign-out, so a present key always belongs to the current identity).
+//   * Concurrent callers share ONE in-flight provision (no double rotation).
+let provisionInFlight: Promise<boolean> | null = null;
+
+export function ensureIngestKeyProvisioned(app: IngestAppId): Promise<boolean> {
+  if (provisionInFlight) return provisionInFlight;
+  provisionInFlight = (async () => {
+    try {
+      const existing = await getIngestApiKey();
+      if (existing) return true;
+      if (!supabase) return false;
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
+      if (!token) return false;
+      return await provisionIngestKey(token, app);
+    } catch (e) {
+      console.log('[keyStore] ensureProvision error', e);
+      return false;
+    } finally {
+      provisionInFlight = null;
+    }
+  })();
+  return provisionInFlight;
 }
