@@ -8,7 +8,7 @@ export type RootStackParamList = {
   AICorrectiveAction: { ncrId: string };
   Settings: undefined;
   Reports: undefined;
-  Actions: undefined;
+  Actions: { initialFilter?: 'All' | 'Open' | 'Overdue' | 'Completed' } | undefined;
   OnePager: { ncrId?: string } | undefined;
   AuditBuilder: { templateId?: string } | undefined;
   AuditExecution: { auditId: string };
@@ -29,8 +29,14 @@ export type RootStackParamList = {
 
 export type TabParamList = {
   Dashboard: undefined;
-  NCRs: { filterIds?: string[]; filterTitle?: string } | undefined;
+  NCRs:
+    | {
+        filterIds?: string[];
+        filterTitle?: string;
+        initialStatus?: 'All' | 'Open' | 'In Progress' | 'Closed' | 'Overdue';
+      }
+    | undefined;
   Audits: undefined;
-  Training: undefined;
+  Training: { initialFilter?: string } | undefined;
   More: undefined;
 };

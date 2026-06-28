@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { CompositeScreenProps, useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AdBanner } from '../components/AdBanner';
@@ -38,7 +38,7 @@ type StatusFilter = 'All' | TrainingStatus | 'Expiring Soon';
 const STATUS_FILTERS: StatusFilter[] = ['All', ...TrainingStatuses, 'Expiring Soon'];
 type DateFilter = 'All time' | 'This month';
 
-export function TrainingScreen({ navigation }: Props) {
+export function TrainingScreen({ navigation, route }: Props) {
   const {
     records,
     templates,
@@ -47,9 +47,17 @@ export function TrainingScreen({ navigation }: Props) {
     updateRecord,
     saveScheduled,
   } = useTraining();
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('All');
+  const initialFilter = route.params?.initialFilter;
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(
+    (initialFilter as StatusFilter) ?? 'All',
+  );
   const [dateFilter, setDateFilter] = useState<DateFilter>('All time');
   const [exporting, setExporting] = useState(false);
+
+  // Apply an incoming status filter when arriving via a dashboard drill-in.
+  useEffect(() => {
+    if (initialFilter) setStatusFilter(initialFilter as StatusFilter);
+  }, [initialFilter]);
 
   useFocusEffect(
     useCallback(() => {

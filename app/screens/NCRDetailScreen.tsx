@@ -370,22 +370,13 @@ export function NCRDetailScreen({ navigation, route }: Props) {
               </View>
             </Pressable>
           ) : (
-            <View style={{ gap: Spacing.sm }}>
-              <QuickActionButton
-                label="Write Corrective Action with AI"
-                variant="primary"
-                icon="sparkles-outline"
-                onPress={() => navigation.navigate('AICorrectiveAction', { ncrId: ncr.id })}
-                fullWidth
-              />
-              <QuickActionButton
-                label="Write Manually"
-                variant="ghost"
-                icon="create-outline"
-                onPress={() => navigation.navigate('AICorrectiveAction', { ncrId: ncr.id })}
-                fullWidth
-              />
-            </View>
+            <QuickActionButton
+              label="Corrective Action"
+              variant="primary"
+              icon="document-text-outline"
+              onPress={() => navigation.navigate('AICorrectiveAction', { ncrId: ncr.id })}
+              fullWidth
+            />
           )}
         </View>
 

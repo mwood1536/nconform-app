@@ -62,7 +62,7 @@ export function AICorrectiveActionScreen({ navigation, route }: Props) {
   const net = useNetworkStatus();
   const ncr = useMemo(() => ncrs.find((n) => n.id === ncrId) ?? null, [ncrs, ncrId]);
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<DraftCA | null>(null);
   const [editing, setEditing] = useState<keyof DraftCA | null>(null);
@@ -137,9 +137,22 @@ export function AICorrectiveActionScreen({ navigation, route }: Props) {
     }
   };
 
+  // Hydrate an already-saved corrective action for view/edit. We do NOT auto-generate:
+  // when no CA exists yet the user chooses AI vs manual on the gate below.
   useEffect(() => {
-    if (ncr && !draft) {
-      void runGenerate();
+    if (ncr?.correctiveAction && !draft) {
+      const ca = ncr.correctiveAction;
+      setDraft({
+        problemStatement: ca.problemStatement,
+        containmentAction: ca.containmentAction,
+        rootCause: ca.rootCause,
+        correctiveAction: ca.correctiveAction,
+        preventiveAction: ca.preventiveAction,
+        standardReference: ca.standardReference,
+        verificationMethod: ca.verificationMethod,
+        responsibleParty: ca.responsibleParty,
+        targetDate: ca.targetDate,
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ncr]);
@@ -217,8 +230,8 @@ export function AICorrectiveActionScreen({ navigation, route }: Props) {
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
       <ScreenHeader
-        title="AI Corrective Action Writer"
-        subtitle="Generating your corrective action report"
+        title="Corrective Action"
+        subtitle="AI-assisted or manual"
         onBack={() => navigation.goBack()}
       />
       <OfflineBanner />
@@ -242,6 +255,33 @@ export function AICorrectiveActionScreen({ navigation, route }: Props) {
             {ncr.description}
           </Text>
         </View>
+
+        {!draft && !loading && !error ? (
+          <View style={styles.gateCard}>
+            <Ionicons name="document-text-outline" size={28} color={Colors.navy} />
+            <Text style={styles.gateTitle}>Create the corrective action</Text>
+            <Text style={styles.gateBody}>
+              Let AI draft all sections from this NCR, or start from a blank template and
+              write it yourself. You can edit everything before saving.
+            </Text>
+            <View style={styles.gateActions}>
+              <QuickActionButton
+                label="Generate with AI"
+                variant="primary"
+                icon="sparkles-outline"
+                onPress={runGenerate}
+                fullWidth
+              />
+              <QuickActionButton
+                label="Write manually"
+                variant="ghost"
+                icon="create-outline"
+                onPress={startManual}
+                fullWidth
+              />
+            </View>
+          </View>
+        ) : null}
 
         {loading ? (
           <View style={styles.loadingWrap}>
@@ -484,6 +524,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.sm,
     ...Shadow.card,
+  },
+  gateCard: {
+    backgroundColor: Colors.card,
+    borderRadius: Radii.card,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: Spacing.xl,
+    alignItems: 'center',
+    gap: Spacing.sm,
+    ...Shadow.card,
+  },
+  gateTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.navy,
+  },
+  gateBody: {
+    fontSize: 13,
+    color: Colors.secondaryText,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  gateActions: {
+    alignSelf: 'stretch',
+    gap: Spacing.sm,
+    marginTop: Spacing.md,
   },
   pulseRow: {
     flexDirection: 'row',

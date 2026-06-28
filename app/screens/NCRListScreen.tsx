@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { CompositeScreenProps, useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   FlatList,
   Pressable,
@@ -33,10 +33,16 @@ const FILTERS: Filter[] = ['All', 'Open', 'In Progress', 'Closed', 'Overdue'];
 
 export function NCRListScreen({ navigation, route }: Props) {
   const { ncrs, reload, loading, setStatus, deleteNCR, updateNCR } = useNCRs();
-  const [filter, setFilter] = useState<Filter>('All');
+  const [filter, setFilter] = useState<Filter>(route.params?.initialStatus ?? 'All');
   const [query, setQuery] = useState('');
   const filterIds = route.params?.filterIds;
   const filterTitle = route.params?.filterTitle;
+  const initialStatus = route.params?.initialStatus;
+
+  // Apply an incoming status filter when arriving via a dashboard drill-in.
+  useEffect(() => {
+    if (initialStatus) setFilter(initialStatus);
+  }, [initialStatus]);
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 

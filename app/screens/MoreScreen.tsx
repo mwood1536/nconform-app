@@ -28,38 +28,14 @@ const ROWS: RowDef[] = [
   {
     icon: 'document-text-outline',
     title: 'Reports',
-    subtitle: 'Audit-ready PDF exports and one-pagers',
+    subtitle: 'Audit-ready exports, one-pagers, Pareto & department analysis',
     route: 'Reports',
-  },
-  {
-    icon: 'analytics-outline',
-    title: 'Pareto Analysis',
-    subtitle: 'Top recurring root causes',
-    route: 'Pareto',
-  },
-  {
-    icon: 'business-outline',
-    title: 'By Department',
-    subtitle: 'NCR breakdown per area',
-    route: 'DepartmentBreakdown',
   },
   {
     icon: 'flash-outline',
     title: 'Action Tracker',
     subtitle: 'Every assignment across nonconformances',
     route: 'Actions',
-  },
-  {
-    icon: 'newspaper-outline',
-    title: 'One Pager Builder',
-    subtitle: 'Executive summary card for leadership',
-    route: 'OnePager',
-  },
-  {
-    icon: 'search-outline',
-    title: 'Search',
-    subtitle: 'Find NCRs, audits, training, observations',
-    route: 'Search',
   },
   {
     icon: 'people-outline',

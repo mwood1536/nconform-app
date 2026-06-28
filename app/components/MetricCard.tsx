@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Colors, Radii, Shadow, Spacing } from '../constants/colors';
 
 interface Props {
@@ -8,6 +8,8 @@ interface Props {
   value: number | string;
   accent?: 'neutral' | 'amber' | 'red' | 'green' | 'navy';
   icon?: keyof typeof Ionicons.glyphMap;
+  onPress?: () => void;
+  accessibilityLabel?: string;
 }
 
 const accentMap: Record<NonNullable<Props['accent']>, string> = {
@@ -18,10 +20,17 @@ const accentMap: Record<NonNullable<Props['accent']>, string> = {
   navy: Colors.navy,
 };
 
-export function MetricCard({ label, value, accent = 'neutral', icon }: Props) {
+export function MetricCard({
+  label,
+  value,
+  accent = 'neutral',
+  icon,
+  onPress,
+  accessibilityLabel,
+}: Props) {
   const color = accentMap[accent];
-  return (
-    <View style={styles.card}>
+  const body = (
+    <>
       <View style={styles.header}>
         <Text style={styles.label} numberOfLines={1}>
           {label}
@@ -30,8 +39,29 @@ export function MetricCard({ label, value, accent = 'neutral', icon }: Props) {
       </View>
       <Text style={[styles.value, { color }]}>{value}</Text>
       <View style={[styles.accentBar, { backgroundColor: color }]} />
-    </View>
+    </>
   );
+
+  if (onPress) {
+    return (
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel ?? `${label}: ${value}`}
+        style={({ pressed }) => [styles.card, pressed && { opacity: 0.9 }]}
+      >
+        {body}
+        <Ionicons
+          name="chevron-forward"
+          size={14}
+          color={Colors.secondaryText}
+          style={styles.chevron}
+        />
+      </Pressable>
+    );
+  }
+
+  return <View style={styles.card}>{body}</View>;
 }
 
 const styles = StyleSheet.create({
@@ -70,5 +100,10 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     width: 3,
+  },
+  chevron: {
+    position: 'absolute',
+    right: Spacing.sm,
+    bottom: Spacing.sm,
   },
 });

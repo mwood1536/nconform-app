@@ -27,8 +27,11 @@ import { Colors, Shadow, Spacing } from '../constants/colors';
 import { useAudits } from '../hooks/useAudits';
 import { useNCRs } from '../hooks/useNCRs';
 import { useProfile } from '../hooks/useProfile';
+import { useTraining } from '../hooks/useTraining';
 import { RootStackParamList, TabParamList } from '../navigation/types';
 import { greetingFor, isOverdue } from '../utils/ncrHelpers';
+import { scheduleStatus } from '../utils/auditHelpers';
+import { expiringBuckets } from '../utils/training';
 import { entitlements } from '../core/EntitlementService';
 import {
   activityAgeDays,
@@ -45,7 +48,8 @@ type Props = CompositeScreenProps<
 export function DashboardScreen({ navigation }: Props) {
   const { profile } = useProfile();
   const { ncrs, reload } = useNCRs();
-  const { audits, reload: reloadAudits } = useAudits();
+  const { audits, scheduled, reload: reloadAudits } = useAudits();
+  const { records: trainingRecords, reload: reloadTraining } = useTraining();
   const [showTutorial, setShowTutorial] = useState(false);
 
   useEffect(() => {
@@ -58,12 +62,11 @@ export function DashboardScreen({ navigation }: Props) {
     useCallback(() => {
       void reload();
       void reloadAudits();
-    }, [reload, reloadAudits]),
+      void reloadTraining();
+    }, [reload, reloadAudits, reloadTraining]),
   );
 
   const metrics = useMemo(() => {
-    const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
     const open = ncrs.filter((n) => n.status !== 'Closed').length;
     const overdueActions = ncrs.reduce((acc, n) => {
       const overdueOnNCR = n.actions.filter(
@@ -72,12 +75,29 @@ export function DashboardScreen({ navigation }: Props) {
       const ncrOverdueBonus = isOverdue(n) ? 1 : 0;
       return acc + overdueOnNCR + ncrOverdueBonus;
     }, 0);
-    const closedThisMonth = ncrs.filter(
-      (n) => n.status === 'Closed' && n.updatedAt >= monthStart,
-    ).length;
-    const auditsThisMonth = audits.filter((a) => a.createdAt >= monthStart).length;
-    return { open, overdueActions, closedThisMonth, auditsThisMonth };
-  }, [ncrs, audits]);
+    // Pending audits = scheduled audits that are overdue OR upcoming (decision: overdue + upcoming).
+    const pendingAudits = scheduled.filter((s) => {
+      const st = scheduleStatus(s);
+      return st === 'Overdue' || st === 'Upcoming';
+    }).length;
+    // Training expiring = expired + expiring within 30 days (decision: include both).
+    const buckets = expiringBuckets(trainingRecords);
+    const trainingExpiring = buckets.in30 + buckets.expired;
+    // Awaiting approval = NCRs sitting in Submitted / Under Review.
+    const awaitingNCRs = ncrs.filter(
+      (n) =>
+        n.approvalWorkflow?.status === 'Submitted' ||
+        n.approvalWorkflow?.status === 'Under Review',
+    );
+    return {
+      open,
+      overdueActions,
+      pendingAudits,
+      trainingExpiring,
+      awaitingApproval: awaitingNCRs.length,
+      awaitingApprovalIds: awaitingNCRs.map((n) => n.id),
+    };
+  }, [ncrs, scheduled, trainingRecords]);
 
   const recent = ncrs.slice(0, 5);
   const greeting = greetingFor();
@@ -123,26 +143,59 @@ export function DashboardScreen({ navigation }: Props) {
               value={metrics.open}
               accent={metrics.open > 0 ? 'amber' : 'neutral'}
               icon="clipboard-outline"
+              onPress={() =>
+                navigation.navigate('Main', {
+                  screen: 'NCRs',
+                  params: { initialStatus: 'Open' },
+                })
+              }
             />
             <MetricCard
               label="Overdue Actions"
               value={metrics.overdueActions}
               accent={metrics.overdueActions > 0 ? 'red' : 'neutral'}
               icon="alert-circle-outline"
+              onPress={() => navigation.navigate('Actions', { initialFilter: 'Overdue' })}
             />
           </View>
           <View style={styles.metricsRow}>
             <MetricCard
-              label="Audits This Month"
-              value={metrics.auditsThisMonth}
+              label="Pending Audits"
+              value={metrics.pendingAudits}
+              accent={metrics.pendingAudits > 0 ? 'amber' : 'neutral'}
               icon="shield-checkmark-outline"
+              onPress={() => navigation.navigate('AuditSchedule')}
             />
             <MetricCard
-              label="Closed This Month"
-              value={metrics.closedThisMonth}
-              accent={metrics.closedThisMonth > 0 ? 'green' : 'neutral'}
-              icon="checkmark-circle-outline"
+              label="Training Expiring"
+              value={metrics.trainingExpiring}
+              accent={metrics.trainingExpiring > 0 ? 'red' : 'neutral'}
+              icon="time-outline"
+              onPress={() =>
+                navigation.navigate('Main', {
+                  screen: 'Training',
+                  params: { initialFilter: 'Expiring Soon' },
+                })
+              }
             />
+          </View>
+          <View style={styles.metricsRow}>
+            <MetricCard
+              label="Awaiting Approval"
+              value={metrics.awaitingApproval}
+              accent={metrics.awaitingApproval > 0 ? 'navy' : 'neutral'}
+              icon="checkmark-done-outline"
+              onPress={() =>
+                navigation.navigate('Main', {
+                  screen: 'NCRs',
+                  params: {
+                    filterIds: metrics.awaitingApprovalIds,
+                    filterTitle: 'Awaiting Approval',
+                  },
+                })
+              }
+            />
+            <View style={styles.metricSpacer} />
           </View>
         </View>
 
@@ -204,11 +257,16 @@ export function DashboardScreen({ navigation }: Props) {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Recent Activity</Text>
-            {ncrs.length > 0 ? (
-              <Pressable onPress={() => navigation.navigate('Main', { screen: 'NCRs' })}>
-                <Text style={styles.sectionAction}>View all</Text>
+            <View style={styles.sectionLinks}>
+              <Pressable onPress={() => navigation.navigate('Reports')}>
+                <Text style={styles.sectionAction}>View Reports</Text>
               </Pressable>
-            ) : null}
+              {ncrs.length > 0 ? (
+                <Pressable onPress={() => navigation.navigate('Main', { screen: 'NCRs' })}>
+                  <Text style={styles.sectionAction}>View all</Text>
+                </Pressable>
+              ) : null}
+            </View>
           </View>
           {recent.length === 0 ? (
             <View style={styles.emptyCard}>
@@ -246,7 +304,14 @@ export function DashboardScreen({ navigation }: Props) {
               label="Start Audit"
               variant="outline"
               icon="shield-checkmark-outline"
-              onPress={() => navigation.navigate('Main', { screen: 'Audits' })}
+              onPress={() => navigation.navigate('AuditBuilder')}
+              fullWidth
+            />
+            <QuickActionButton
+              label="New Training"
+              variant="ghost"
+              icon="school-outline"
+              onPress={() => navigation.navigate('TrainingForm')}
               fullWidth
             />
             <QuickActionButton
@@ -254,13 +319,6 @@ export function DashboardScreen({ navigation }: Props) {
               variant="amber"
               icon="shield-outline"
               onPress={() => navigation.navigate('SafetyObservation')}
-              fullWidth
-            />
-            <QuickActionButton
-              label="View Reports"
-              variant="ghost"
-              icon="document-text-outline"
-              onPress={() => navigation.navigate('Reports')}
               fullWidth
             />
           </View>
@@ -337,6 +395,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: Spacing.md,
   },
+  metricSpacer: {
+    flex: 1,
+  },
   section: {
     paddingHorizontal: Spacing.xl,
     marginTop: Spacing.xl,
@@ -353,6 +414,11 @@ const styles = StyleSheet.create({
     color: Colors.navy,
     letterSpacing: -0.2,
     marginBottom: Spacing.md,
+  },
+  sectionLinks: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.lg,
   },
   sectionAction: {
     fontSize: 13,

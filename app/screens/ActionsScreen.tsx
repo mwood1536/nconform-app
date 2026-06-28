@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -27,9 +27,15 @@ interface ActionWithNCR {
   ncr: NCR;
 }
 
-export function ActionsScreen({ navigation }: Props) {
+export function ActionsScreen({ navigation, route }: Props) {
   const { ncrs, reload, toggleAction } = useNCRs();
-  const [filter, setFilter] = useState<ActionFilter>('All');
+  const initialFilter = route.params?.initialFilter;
+  const [filter, setFilter] = useState<ActionFilter>(initialFilter ?? 'All');
+
+  // Apply an incoming filter when arriving via a dashboard drill-in.
+  useEffect(() => {
+    if (initialFilter) setFilter(initialFilter);
+  }, [initialFilter]);
 
   useFocusEffect(
     useCallback(() => {

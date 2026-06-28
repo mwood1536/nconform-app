@@ -476,26 +476,6 @@ export function SettingsScreen({ navigation }: Props) {
           </Pressable>
         </SectionCard>
 
-        <SectionCard title="Team">
-          <Pressable
-            onPress={() => navigation.navigate('UserDirectory')}
-            style={({ pressed }) => [styles.navRow, pressed && { opacity: 0.85 }]}
-          >
-            <View style={styles.navIcon}>
-              <Ionicons name="people-outline" size={18} color={Colors.navy} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.navTitle}>User Directory</Text>
-              <Text style={styles.navSub}>
-                {tier === 'bundle'
-                  ? 'Manage shared team members'
-                  : 'Bundle feature — shared team roster'}
-              </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={Colors.secondaryText} />
-          </Pressable>
-        </SectionCard>
-
         <SectionCard title="User Roles">
           <View style={styles.lockHeader}>
             <View style={styles.lockIcon}>
@@ -527,22 +507,6 @@ export function SettingsScreen({ navigation }: Props) {
           >
             <Text style={styles.linkLabel}>Role-based permissions available with Pro Web — Learn more</Text>
             <Ionicons name="open-outline" size={16} color={Colors.steelBlue} />
-          </Pressable>
-        </SectionCard>
-
-        <SectionCard title="Help">
-          <Pressable
-            onPress={() => navigation.navigate('HelpFAQ')}
-            style={({ pressed }) => [styles.navRow, pressed && { opacity: 0.85 }]}
-          >
-            <View style={styles.navIcon}>
-              <Ionicons name="help-circle-outline" size={18} color={Colors.navy} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.navTitle}>Help & FAQ</Text>
-              <Text style={styles.navSub}>How NConform works, by topic. Email support inside.</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={Colors.secondaryText} />
           </Pressable>
         </SectionCard>
 
