@@ -16,7 +16,7 @@ export async function getIngestApiKey(): Promise<string | null> {
   try {
     return await SecureStore.getItemAsync(INGEST_KEY_SLOT);
   } catch (e) {
-    console.log('[keyStore] read error', e);
+    if (__DEV__) console.log('[keyStore] read error', e);
     return null;
   }
 }
@@ -29,7 +29,7 @@ export async function clearIngestApiKey(): Promise<void> {
   try {
     await SecureStore.deleteItemAsync(INGEST_KEY_SLOT);
   } catch (e) {
-    console.log('[keyStore] clear error', e);
+    if (__DEV__) console.log('[keyStore] clear error', e);
   }
 }
 
@@ -67,7 +67,7 @@ export async function provisionIngestKey(
     await setIngestApiKey(plaintext);
     return true;
   } catch (e) {
-    console.log('[keyStore] provision error', e);
+    if (__DEV__) console.log('[keyStore] provision error', e);
     return false;
   }
 }
@@ -96,7 +96,7 @@ export function ensureIngestKeyProvisioned(app: IngestAppId): Promise<boolean> {
       if (!token) return false;
       return await provisionIngestKey(token, app);
     } catch (e) {
-      console.log('[keyStore] ensureProvision error', e);
+      if (__DEV__) console.log('[keyStore] ensureProvision error', e);
       return false;
     } finally {
       provisionInFlight = null;

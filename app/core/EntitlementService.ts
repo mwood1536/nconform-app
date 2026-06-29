@@ -62,7 +62,7 @@ class LocalEntitlementService implements EntitlementService {
       try {
         l({ app: this.app, tier });
       } catch (e) {
-        console.log('EntitlementService listener error', e);
+        if (__DEV__) console.log('EntitlementService listener error', e);
       }
     });
   }

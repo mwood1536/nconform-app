@@ -109,7 +109,7 @@ class SupabaseAuthProvider implements AuthProvider {
         else this.setSignedOut();
       });
     } catch (e) {
-      console.log('[AuthProvider] session restore failed', e);
+      if (__DEV__) console.log('[AuthProvider] session restore failed', e);
       this.setSignedOut();
     }
   }
@@ -143,7 +143,7 @@ class SupabaseAuthProvider implements AuthProvider {
       try {
         l(snapshot);
       } catch (e) {
-        console.log('AuthProvider listener error', e);
+        if (__DEV__) console.log('AuthProvider listener error', e);
       }
     });
   }
@@ -219,13 +219,13 @@ class SupabaseAuthProvider implements AuthProvider {
       try {
         await supabase.auth.signOut();
       } catch (e) {
-        console.log('[AuthProvider] signOut error', e);
+        if (__DEV__) console.log('[AuthProvider] signOut error', e);
       }
     }
     try {
       await GoogleSignin.signOut();
     } catch (e) {
-      console.log('[AuthProvider] google signOut error', e);
+      if (__DEV__) console.log('[AuthProvider] google signOut error', e);
     }
     // onAuthStateChange will also fire, but set it eagerly for an immediate UI.
     this.setSignedOut();

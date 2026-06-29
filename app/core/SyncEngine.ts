@@ -66,7 +66,7 @@ class LocalSyncEngine implements SyncEngine {
       const raw = await AsyncStorage.getItem(OUTBOX_KEY);
       return raw ? (JSON.parse(raw) as OutboxEntry[]) : [];
     } catch (e) {
-      console.log('SyncEngine getOutbox error', e);
+      if (__DEV__) console.log('SyncEngine getOutbox error', e);
       return [];
     }
   }
@@ -75,7 +75,7 @@ class LocalSyncEngine implements SyncEngine {
     try {
       await AsyncStorage.setItem(OUTBOX_KEY, JSON.stringify(entries));
     } catch (e) {
-      console.log('SyncEngine writeOutbox error', e);
+      if (__DEV__) console.log('SyncEngine writeOutbox error', e);
     }
   }
 
@@ -84,7 +84,7 @@ class LocalSyncEngine implements SyncEngine {
       try {
         l(pendingCount);
       } catch (e) {
-        console.log('SyncEngine listener error', e);
+        if (__DEV__) console.log('SyncEngine listener error', e);
       }
     });
   }
@@ -106,7 +106,7 @@ class LocalSyncEngine implements SyncEngine {
       this.scheduleWriteFlush();
     } catch (e) {
       // Outbox is best-effort; a failure here must never break a local write.
-      console.log('SyncEngine append error', e);
+      if (__DEV__) console.log('SyncEngine append error', e);
     }
   }
 
@@ -139,7 +139,7 @@ class LocalSyncEngine implements SyncEngine {
         maxRetries: MAX_RETRIES,
       });
     } catch (e) {
-      console.log('SyncEngine flush error', e);
+      if (__DEV__) console.log('SyncEngine flush error', e);
       this.scheduleRetry();
       return { uploaded: 0 };
     }
